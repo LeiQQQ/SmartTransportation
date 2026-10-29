@@ -124,11 +124,6 @@ export struct EventReportPage {
                   })
               }
 
-              Text('当前为手动选择路口；接入定位后将自动填充坐标')
-                .fontSize(10)
-                .fontColor(ThemeConstants.TEXT_SUB)
-                .width('100%')
-                .margin({ top: 8 })
             }
             .width('100%')
             .padding(16)

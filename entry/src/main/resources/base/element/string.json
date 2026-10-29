@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "module description"
+      "value": "智行西安 · 片区信号优化与态势感知"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "description"
+      "value": "西安城墙内片区交通态势与信号配时"
     },
     {
       "name": "EntryAbility_label",
-      "value": "label"
+      "value": "智行西安"
     }
   ]
 }

@@ -1,6 +1,7 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { DetailParam } from '../common/base/DetailParam';
+import { SplashView } from '../components/SplashView';
 import { HomePage } from './HomePage';
 import { TrafficMapPage } from './TrafficMapPage';
 import { EventPage } from './EventPage';
@@ -15,10 +16,24 @@ import { AboutPage } from './AboutPage';
 @Component
 struct MainPage {
   @State currentIndex: number = 0;
+  @State showSplash: boolean = true;
+  @State splashOpacity: number = 1;
   @Provide('pathStack') pathStack: NavPathStack = new NavPathStack();
 
   aboutToAppear(): void {
     NavRouter.bind(this.pathStack);
+    this.playSplash();
+  }
+
+  private playSplash(): void {
+    setTimeout(() => {
+      animateTo({ duration: 480, curve: Curve.EaseInOut }, () => {
+        this.splashOpacity = 0;
+      });
+      setTimeout(() => {
+        this.showSplash = false;
+      }, 500);
+    }, 1500);
   }
 
   @Builder
@@ -53,38 +68,48 @@ struct MainPage {
   }
 
   build() {
-    Navigation(this.pathStack) {
-      Tabs({ barPosition: BarPosition.End, index: this.currentIndex }) {
-        TabContent() {
-          HomePage()
-        }
-        .tabBar(this.tabItem(0, '首页'))
+    Stack() {
+      Navigation(this.pathStack) {
+        Tabs({ barPosition: BarPosition.End, index: this.currentIndex }) {
+          TabContent() {
+            HomePage()
+          }
+          .tabBar(this.tabItem(0, '首页'))
 
-        TabContent() {
-          TrafficMapPage()
-        }
-        .tabBar(this.tabItem(1, '路况'))
+          TabContent() {
+            TrafficMapPage()
+          }
+          .tabBar(this.tabItem(1, '路况'))
 
-        TabContent() {
-          EventPage()
-        }
-        .tabBar(this.tabItem(2, '事件'))
+          TabContent() {
+            EventPage()
+          }
+          .tabBar(this.tabItem(2, '事件'))
 
-        TabContent() {
-          MinePage()
+          TabContent() {
+            MinePage()
+          }
+          .tabBar(this.tabItem(3, '我的'))
         }
-        .tabBar(this.tabItem(3, '我的'))
+        .barHeight(ThemeConstants.BAR_HEIGHT)
+        .barBackgroundColor(ThemeConstants.BG_CARD)
+        .scrollable(false)
+        .onChange((index: number) => {
+          this.currentIndex = index;
+        })
       }
-      .barHeight(ThemeConstants.BAR_HEIGHT)
-      .barBackgroundColor(ThemeConstants.BG_CARD)
-      .scrollable(false)
-      .onChange((index: number) => {
-        this.currentIndex = index;
-      })
+      .hideTitleBar(true)
+      .mode(NavigationMode.Stack)
+      .navDestination(this.pageMap)
+      .backgroundColor(ThemeConstants.BG_PAGE)
+
+      if (this.showSplash) {
+        SplashView({ fadeOpacity: this.splashOpacity })
+          .width('100%')
+          .height('100%')
+      }
     }
-    .hideTitleBar(true)
-    .mode(NavigationMode.Stack)
-    .navDestination(this.pageMap)
-    .backgroundColor(ThemeConstants.BG_PAGE)
+    .width('100%')
+    .height('100%')
   }
 }

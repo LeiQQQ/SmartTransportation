@@ -34,7 +34,7 @@ export struct MinePage {
       Column() {
         Row() {
           Column() {
-            Text('智行城墙')
+            Text('智行西安')
               .fontSize(20)
               .fontWeight(FontWeight.Bold)
               .fontColor(ThemeConstants.TEXT_INVERT)
@@ -133,11 +133,6 @@ export struct MinePage {
         .borderRadius(ThemeConstants.RADIUS_CARD)
 
         Blank()
-
-        Text('数据来源：公开路网资料 + 交通流仿真模型')
-          .fontSize(10)
-          .fontColor(ThemeConstants.TEXT_SUB)
-          .margin({ bottom: 16 })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 6 })
