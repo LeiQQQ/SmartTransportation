@@ -1,8 +1,8 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
 
-@Component
+@ComponentV2
 export struct EmptyView {
-  @Prop tip: string = '暂无数据';
+  @Param tip: string = '暂无数据';
 
   build() {
     Column() {

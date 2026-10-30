@@ -1,8 +1,8 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
 
-@Component
+@ComponentV2
 export struct LoadingView {
-  @Prop tip: string = '加载中…';
+  @Param tip: string = '加载中…';
 
   build() {
     Column() {

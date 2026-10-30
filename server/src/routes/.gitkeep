@@ -1,0 +1,2 @@
+# 占位：路由层（P1 填充）
+# area.ts / traffic.ts / signal.ts / event.ts —— 只做参数校验与响应包装

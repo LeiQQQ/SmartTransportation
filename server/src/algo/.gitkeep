@@ -1,0 +1,6 @@
+# 占位：算法层（P1 从端侧 XianWallMock.ets 平移）
+# webster.ts（最优周期 + 绿信比）· delay.ts（Webster 延误）· simulator.ts（流量仿真）
+#
+# ★ 同步约定：本目录算法与端侧 entry/src/main/ets/mock/XianWallMock.ets 为同一实现的两个副本，
+#   任一侧修改参数（Y 上限 0.92、周期 clamp[60,150]、直行最小绿灯 10s / 左转 8s、L=16）
+#   必须同步修改另一侧，否则前后端算出的周期会不一致。

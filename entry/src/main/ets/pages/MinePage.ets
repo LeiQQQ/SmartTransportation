@@ -11,10 +11,10 @@ interface MenuItem {
 /**
  * 我的：收藏、偏好、数据说明
  */
-@Component
+@ComponentV2
 export struct MinePage {
-  @State darkMode: boolean = false;
-  @State favoriteCount: number = 0;
+  @Local darkMode: boolean = false;
+  @Local favoriteCount: number = 0;
 
   private menus: MenuItem[] = [
     { title: '我收藏的路口', desc: '查看已收藏的信号路口' } as MenuItem,
@@ -65,9 +65,9 @@ export struct MinePage {
         Row() {
           this.statItem('' + this.favoriteCount, '收藏路口')
           Divider().vertical(true).height(28).color(ThemeConstants.DIVIDER)
-          this.statItem('15', '监测路口')
+          this.statItem('' + AreaConstants.INTERSECTION_COUNT, '监测路口')
           Divider().vertical(true).height(28).color(ThemeConstants.DIVIDER)
-          this.statItem('18', '监测路段')
+          this.statItem('' + AreaConstants.SEGMENT_COUNT, '监测路段')
         }
         .width('100%')
         .padding(18)

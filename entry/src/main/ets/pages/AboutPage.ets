@@ -10,7 +10,7 @@ interface Section {
 /**
  * 数据说明：主动交代数据来源与指标口径，避免答辩质疑
  */
-@Component
+@ComponentV2
 export struct AboutPage {
   private sections: Section[] = [
     {

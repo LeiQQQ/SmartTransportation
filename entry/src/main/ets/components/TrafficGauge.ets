@@ -5,13 +5,15 @@ import { TrafficUtil } from '../common/utils/TrafficUtil';
  * 拥堵指数环形仪表盘（Canvas 自绘）
  * 0~10，颜色按等级分级，数字带缓动
  */
-@Component
+@ComponentV2
 export struct TrafficGauge {
-  @Prop @Watch('onIndexChange') index: number = 0;
+  @Param index: number = 0;
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
   private ready: boolean = false;
 
+  /** V2 中 @Watch 改为 @Monitor，入参变化时重绘 */
+  @Monitor('index')
   onIndexChange(): void {
     this.draw();
   }

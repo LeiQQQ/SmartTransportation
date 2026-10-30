@@ -6,11 +6,11 @@ import { EventTypeUtil, TrafficEvent } from '../model/TrafficEvent';
 /**
  * 事件中心：拥堵/事故/施工/管制事件列表
  */
-@Component
+@ComponentV2
 export struct EventPage {
-  @State events: TrafficEvent[] = [];
-  @State filtered: TrafficEvent[] = [];
-  @State filterIndex: number = 0;
+  @Local events: TrafficEvent[] = [];
+  @Local filtered: TrafficEvent[] = [];
+  @Local filterIndex: number = 0;
 
   private filters: number[] = [-1, 0, 3, 1, 2];
 

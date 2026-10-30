@@ -8,15 +8,15 @@ import { Intersection } from '../model/Intersection';
 /**
  * 事件上报：类型 + 位置 + 影响等级 + 描述
  */
-@Component
+@ComponentV2
 export struct EventReportPage {
-  @State typeIndex: number = 3;
-  @State impact: number = 2;
-  @State desc: string = '';
-  @State roadNames: string[] = [];
-  @State roadOptions: SelectOption[] = [];
-  @State roadIndex: number = 0;
-  @State submitting: boolean = false;
+  @Local typeIndex: number = 3;
+  @Local impact: number = 2;
+  @Local desc: string = '';
+  @Local roadNames: string[] = [];
+  @Local roadOptions: SelectOption[] = [];
+  @Local roadIndex: number = 0;
+  @Local submitting: boolean = false;
 
   private types: number[] = [0, 1, 2, 3];
   private impacts: string[] = ['轻微', '一般', '严重'];

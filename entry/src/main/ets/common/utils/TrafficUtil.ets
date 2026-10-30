@@ -56,6 +56,41 @@ export class TrafficUtil {
   /**
    * 拥堵指数（0~10）→ 等级
    */
+  /**
+   * 路段拥堵度 → 道路三档路况（与导航地图一致的三色显示）
+   * 0 畅通（绿） / 1 缓行（黄） / 2 拥堵（红）
+   *
+   * 说明：路口饱和度用五级（见 levelOfSaturation），道路路况用三档，
+   * 因为道路上只能给出「走得动 / 走得慢 / 走不动」三种判断
+   */
+  static roadLevelOf(congestion: number): number {
+    if (congestion < 0.55) {
+      return 0;
+    }
+    if (congestion < 0.8) {
+      return 1;
+    }
+    return 2;
+  }
+
+  static colorOfRoadLevel(level: number): string {
+    if (level === 0) {
+      return ThemeConstants.LEVEL_CLEAR;
+    }
+    if (level === 1) {
+      return ThemeConstants.LEVEL_LIGHT;
+    }
+    return ThemeConstants.LEVEL_SEVERE;
+  }
+
+  static roadLevelName(level: number): string {
+    const names: string[] = ['畅通', '缓行', '拥堵'];
+    if (level < 0 || level > 2) {
+      return '畅通';
+    }
+    return names[level];
+  }
+
   static levelOfIndex(index: number): number {
     if (index < 2) {
       return 0;

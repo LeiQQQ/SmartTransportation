@@ -8,7 +8,9 @@ import { TrafficUtil } from '../common/utils/TrafficUtil';
 
 /**
  * 西安城墙内片区仿真数据源
- * 路网为手工建模的 15 个信号路口主干网，流量按高斯双峰模型生成
+ * 路网按真实主干道路建模：20 个信号路口 + 32 条路段
+ * 四门：安远门（北）/ 长乐门（东）/ 永宁门（南）/ 安定门（西）；四条大街、环城路、莲湖路—西五路—东五路、南广济街等
+ * 流量按高斯双峰模型生成；与后端 server/src/data/network.ts 严格一致
  */
 export class XianWallMock {
   private static intersections: Intersection[] | undefined = undefined;
@@ -21,21 +23,33 @@ export class XianWallMock {
       return XianWallMock.intersections;
     }
     const list: Intersection[] = [];
-    list.push(XianWallMock.build('INT_01', '钟楼', 108.9470, 34.2606, IntersectionType.RING, 4, 3));
-    list.push(XianWallMock.build('INT_02', '鼓楼', 108.9435, 34.2640, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_03', '北大街·西华门', 108.9478, 34.2685, IntersectionType.CROSS, 4, 3));
-    list.push(XianWallMock.build('INT_04', '北大街·莲湖路', 108.9482, 34.2735, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_05', '东大街·端履门', 108.9555, 34.2612, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_06', '东大街·大差市', 108.9640, 34.2615, IntersectionType.CROSS, 4, 3));
-    list.push(XianWallMock.build('INT_07', '南大街·书院门', 108.9488, 34.2520, IntersectionType.T_SHAPE, 3, 2));
-    list.push(XianWallMock.build('INT_08', '南大街·粉巷', 108.9478, 34.2560, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_09', '西大街·桥梓口', 108.9370, 34.2622, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_10', '西大街·洒金桥', 108.9300, 34.2632, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_11', '北院门·大皮院', 108.9425, 34.2655, IntersectionType.T_SHAPE, 3, 1));
-    list.push(XianWallMock.build('INT_12', '解放路·五路口', 108.9570, 34.2700, IntersectionType.CROSS, 4, 3));
-    list.push(XianWallMock.build('INT_13', '和平门', 108.9540, 34.2500, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_14', '朱雀门', 108.9380, 34.2510, IntersectionType.CROSS, 4, 2));
-    list.push(XianWallMock.build('INT_15', '玉祥门', 108.9290, 34.2700, IntersectionType.CROSS, 4, 2));
+    // 四条大街交汇与中轴
+    list.push(XianWallMock.build('INT_01', '钟楼', 108.9495, 34.2615, IntersectionType.RING, 4, 3));
+    list.push(XianWallMock.build('INT_02', '北门·安远门', 108.9487, 34.2752, IntersectionType.RING, 4, 3));
+    list.push(XianWallMock.build('INT_03', '北门十字', 108.9488, 34.2712, IntersectionType.CROSS, 4, 3));
+    list.push(XianWallMock.build('INT_12', '南门·永宁门', 108.9492, 34.2498, IntersectionType.RING, 4, 3));
+    // 西大街沿线
+    list.push(XianWallMock.build('INT_05', '西门·安定门', 108.9297, 34.2622, IntersectionType.RING, 4, 2));
+    list.push(XianWallMock.build('INT_06', '桥梓口', 108.9366, 34.2622, IntersectionType.CROSS, 4, 2));
+    list.push(XianWallMock.build('INT_07', '广济街', 108.9432, 34.2622, IntersectionType.CROSS, 4, 2));
+    // 东大街沿线
+    list.push(XianWallMock.build('INT_08', '端履门', 108.9540, 34.2613, IntersectionType.CROSS, 4, 2));
+    list.push(XianWallMock.build('INT_09', '大差市', 108.9598, 34.2612, IntersectionType.CROSS, 4, 3));
+    // 东端即东门长乐门
+    list.push(XianWallMock.build('INT_20', '长乐门', 108.9696, 34.2612, IntersectionType.RING, 4, 3));
+    // 北部横向
+    list.push(XianWallMock.build('INT_04', '玉祥门', 108.9297, 34.2706, IntersectionType.CROSS, 4, 2));
+    list.push(XianWallMock.build('INT_17', '洒金桥', 108.9332, 34.2708, IntersectionType.CROSS, 4, 2));
+    list.push(XianWallMock.build('INT_10', '五路口', 108.9578, 34.2710, IntersectionType.CROSS, 4, 3));
+    list.push(XianWallMock.build('INT_11', '朝阳门', 108.9696, 34.2698, IntersectionType.CROSS, 4, 2));
+    // 南部与环城路
+    list.push(XianWallMock.build('INT_13', '书院门', 108.9490, 34.2532, IntersectionType.T_SHAPE, 3, 2));
+    list.push(XianWallMock.build('INT_14', '朱雀门', 108.9416, 34.2498, IntersectionType.CROSS, 3, 2));
+    list.push(XianWallMock.build('INT_18', '湘子庙街口', 108.9440, 34.2498, IntersectionType.CROSS, 4, 2));
+    list.push(XianWallMock.build('INT_19', '文昌门', 108.9528, 34.2498, IntersectionType.CROSS, 4, 2));
+    list.push(XianWallMock.build('INT_15', '和平门', 108.9556, 34.2498, IntersectionType.CROSS, 4, 2));
+    // 回坊
+    list.push(XianWallMock.build('INT_16', '北院门', 108.9436, 34.2650, IntersectionType.T_SHAPE, 3, 1));
     XianWallMock.intersections = list;
     return list;
   }
@@ -65,25 +79,47 @@ export class XianWallMock {
     if (XianWallMock.segments !== undefined) {
       return XianWallMock.segments;
     }
+    // 与后端 server/src/data/network.ts 的 RAW_SEGMENTS 严格一致（顺序、id、端点、车道数）
     const raw: string[][] = [
-      ['SEG_01', '西大街东段', 'INT_01', 'INT_02', '3'],
-      ['SEG_02', '西大街中段', 'INT_02', 'INT_09', '3'],
-      ['SEG_03', '西大街西段', 'INT_09', 'INT_10', '2'],
-      ['SEG_04', '东大街西段', 'INT_01', 'INT_05', '3'],
-      ['SEG_05', '东大街东段', 'INT_05', 'INT_06', '3'],
-      ['SEG_06', '南大街北段', 'INT_01', 'INT_08', '2'],
-      ['SEG_07', '南大街南段', 'INT_08', 'INT_07', '2'],
-      ['SEG_08', '北大街南段', 'INT_01', 'INT_03', '3'],
-      ['SEG_09', '北大街北段', 'INT_03', 'INT_04', '2'],
-      ['SEG_10', '西华门大街', 'INT_03', 'INT_11', '2'],
-      ['SEG_11', '鼓楼北街', 'INT_02', 'INT_11', '1'],
-      ['SEG_12', '南门盘道', 'INT_07', 'INT_13', '2'],
-      ['SEG_13', '湘子庙街', 'INT_07', 'INT_14', '2'],
-      ['SEG_14', '莲湖路西段', 'INT_04', 'INT_15', '2'],
-      ['SEG_15', '解放路', 'INT_06', 'INT_12', '3'],
-      ['SEG_16', '环城东路', 'INT_12', 'INT_04', '2'],
-      ['SEG_17', '环城南路西段', 'INT_13', 'INT_14', '2'],
-      ['SEG_18', '环城西路', 'INT_14', 'INT_15', '2']
+      // 中轴：北大街—南大街
+      ['SEG_01', '北大街（北段）', 'INT_02', 'INT_03', '3'],
+      ['SEG_02', '北大街（南段）', 'INT_03', 'INT_01', '3'],
+      ['SEG_03', '南大街（北段）', 'INT_01', 'INT_13', '2'],
+      ['SEG_04', '南大街（南段）', 'INT_13', 'INT_12', '2'],
+      // 横轴：西大街—东大街
+      ['SEG_05', '西大街（东段）', 'INT_01', 'INT_07', '3'],
+      ['SEG_06', '西大街（中段）', 'INT_07', 'INT_06', '3'],
+      ['SEG_07', '西大街（西段）', 'INT_06', 'INT_05', '2'],
+      ['SEG_08', '东大街（西段）', 'INT_01', 'INT_08', '3'],
+      ['SEG_09', '东大街（东段）', 'INT_08', 'INT_09', '3'],
+      // 北部：莲湖路—西五路—东五路
+      ['SEG_10', '莲湖路（西段）', 'INT_04', 'INT_17', '2'],
+      ['SEG_11', '莲湖路（东段）', 'INT_17', 'INT_03', '2'],
+      ['SEG_12', '西五路', 'INT_03', 'INT_10', '3'],
+      ['SEG_13', '东五路', 'INT_10', 'INT_11', '2'],
+      // 东侧：解放路、和平路、柏树林
+      ['SEG_14', '解放路', 'INT_10', 'INT_09', '3'],
+      ['SEG_15', '和平路', 'INT_09', 'INT_15', '2'],
+      ['SEG_16', '书院门·柏树林', 'INT_13', 'INT_08', '1'],
+      // 西侧：洒金桥路、南四府街
+      ['SEG_17', '洒金桥路', 'INT_17', 'INT_06', '2'],
+      ['SEG_18', '南四府街', 'INT_06', 'INT_14', '2'],
+      // 回坊支路
+      ['SEG_19', '北院门街', 'INT_07', 'INT_16', '1'],
+      ['SEG_20', '西华门大街', 'INT_16', 'INT_01', '2'],
+      // 环城路
+      ['SEG_21', '环城北路（西段）', 'INT_04', 'INT_02', '3'],
+      ['SEG_22', '环城北路（东段）', 'INT_02', 'INT_11', '3'],
+      ['SEG_23', '环城西路', 'INT_04', 'INT_05', '3'],
+      ['SEG_24', '环城西路（南延）', 'INT_05', 'INT_14', '2'],
+      ['SEG_25', '环城南路（西段）', 'INT_14', 'INT_18', '3'],
+      ['SEG_28', '环城南路（中段西）', 'INT_18', 'INT_12', '3'],
+      ['SEG_26', '环城南路（中段东）', 'INT_12', 'INT_19', '3'],
+      ['SEG_29', '环城南路（东段）', 'INT_19', 'INT_15', '3'],
+      ['SEG_27', '环城东路（南段）', 'INT_15', 'INT_20', '3'],
+      ['SEG_30', '南广济街', 'INT_07', 'INT_18', '2'],
+      ['SEG_31', '东大街（东延）', 'INT_09', 'INT_20', '3'],
+      ['SEG_32', '环城东路（北段）', 'INT_20', 'INT_11', '3']
     ];
     const list: RoadSegment[] = [];
     for (let i = 0; i < raw.length; i++) {
@@ -354,19 +390,19 @@ export class XianWallMock {
     const list: TrafficEvent[] = [];
     list.push({
       id: 'E001', type: 3, title: '洒金桥南向北行驶缓慢', description: '回坊入口车流集中，排队约 300 米',
-      roadName: '西大街·洒金桥', longitude: 108.9300, latitude: 34.2632, impact: 3, createTime: now - 8 * 60000
+      roadName: '洒金桥路', longitude: 108.9332, latitude: 34.2708, impact: 3, createTime: now - 8 * 60000
     } as TrafficEvent);
     list.push({
       id: 'E002', type: 1, title: '东大街辅道施工', description: '占用一条非机动车道，预计 3 日恢复',
-      roadName: '东大街·端履门', longitude: 108.9555, latitude: 34.2612, impact: 2, createTime: now - 42 * 60000
+      roadName: '东大街·端履门', longitude: 108.9540, latitude: 34.2613, impact: 2, createTime: now - 42 * 60000
     } as TrafficEvent);
     list.push({
       id: 'E003', type: 0, title: '北大街两车剐蹭', description: '占用左侧车道，交警已到场',
-      roadName: '北大街', longitude: 108.9478, latitude: 34.2685, impact: 2, createTime: now - 15 * 60000
+      roadName: '北大街', longitude: 108.9488, latitude: 34.2660, impact: 2, createTime: now - 15 * 60000
     } as TrafficEvent);
     list.push({
       id: 'E004', type: 2, title: '书院门步行街临时管制', description: '节假日人流管控，机动车禁止驶入',
-      roadName: '书院门', longitude: 108.9488, latitude: 34.2520, impact: 1, createTime: now - 120 * 60000
+      roadName: '书院门', longitude: 108.9490, latitude: 34.2532, impact: 1, createTime: now - 120 * 60000
     } as TrafficEvent);
     return list;
   }

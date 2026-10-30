@@ -15,17 +15,17 @@ interface TopItem {
   level: number;
 }
 
-@Component
+@ComponentV2
 export struct HomePage {
-  @State intersections: Intersection[] = [];
-  @State flows: FlowRecord[] = [];
-  @State areaIndex: number = 0;
-  @State avgSpeed: number = 0;
-  @State updateTime: string = '--:--:--';
-  @State topList: TopItem[] = [];
-  @State offline: boolean = false;
-  @State refreshing: boolean = false;
-  @State isRefreshing: boolean = false;
+  @Local intersections: Intersection[] = [];
+  @Local flows: FlowRecord[] = [];
+  @Local areaIndex: number = 0;
+  @Local avgSpeed: number = 0;
+  @Local updateTime: string = '--:--:--';
+  @Local topList: TopItem[] = [];
+  @Local offline: boolean = false;
+  @Local refreshing: boolean = false;
+  @Local isRefreshing: boolean = false;
 
   private timerId: number = -1;
 

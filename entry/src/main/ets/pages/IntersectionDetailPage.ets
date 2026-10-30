@@ -12,22 +12,22 @@ import { SignalPhase, SignalPlan } from '../model/SignalPlan';
 /**
  * 路口实时状态：Canvas 车流 + 相位倒计时 + 用户化等待时间
  */
-@Component
+@ComponentV2
 export struct IntersectionDetailPage {
-  @Prop intersectionId: string = '';
+  @Param intersectionId: string = '';
 
-  @State itName: string = '路口';
-  @State saturation: number = 0;
-  @State phases: SignalPhase[] = [];
-  @State phaseIndex: number = 0;
-  @State remain: number = 0;
-  @State waitSeconds: number = 0;
-  @State planName: string = '';
-  @State cycleLength: number = 0;
-  @State flows: ApproachFlow[] = [];
-  @State canvasW: number = 0;
-  @State canvasH: number = 0;
-  @State isFav: boolean = false;
+  @Local itName: string = '路口';
+  @Local saturation: number = 0;
+  @Local phases: SignalPhase[] = [];
+  @Local phaseIndex: number = 0;
+  @Local remain: number = 0;
+  @Local waitSeconds: number = 0;
+  @Local planName: string = '';
+  @Local cycleLength: number = 0;
+  @Local flows: ApproachFlow[] = [];
+  @Local canvasW: number = 0;
+  @Local canvasH: number = 0;
+  @Local isFav: boolean = false;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);

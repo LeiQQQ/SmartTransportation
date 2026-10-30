@@ -1,0 +1,6 @@
+# 占位：数据源适配器（P1 仿真源，P3 OSM，P4 地图 API）
+# ITrafficSource ← SimulationSource（配时输入的唯一来源）
+#                ← OsmSource（真实路网坐标，离线数据）
+#                ← MapApiSource（底图/态势，预留空实现）
+#
+# 注意：地图开放平台不提供进口道分方向流量与信号配时参数，不能作为配时数据源。

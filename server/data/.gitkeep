@@ -1,0 +1,3 @@
+# 占位：运行时数据目录
+# network.json —— 15 路口 + 18 路段（P3 由 OSM 校准后生成）
+# store.db     —— SQLite 数据文件（P2 起，已被 .gitignore 忽略）

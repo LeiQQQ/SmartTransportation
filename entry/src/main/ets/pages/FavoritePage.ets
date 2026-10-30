@@ -10,10 +10,10 @@ import { TrafficUtil } from '../common/utils/TrafficUtil';
 /**
  * 收藏的路口
  */
-@Component
+@ComponentV2
 export struct FavoritePage {
-  @State list: Intersection[] = [];
-  @State saturations: number[] = [];
+  @Local list: Intersection[] = [];
+  @Local saturations: number[] = [];
 
   aboutToAppear(): void {
     this.loadData();

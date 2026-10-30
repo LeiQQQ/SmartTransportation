@@ -3,16 +3,16 @@ import { ThemeConstants } from '../common/constants/ThemeConstants';
 /**
  * 启动动画：品牌渐变背景 + Logo 缩放淡入 + 光圈扩散 + 文字上浮
  */
-@Component
+@ComponentV2
 export struct SplashView {
-  @Prop fadeOpacity: number = 1;
+  @Param fadeOpacity: number = 1;
 
-  @State logoScale: number = 0.72;
-  @State logoOpacity: number = 0;
-  @State ringScale: number = 0.55;
-  @State ringOpacity: number = 0.55;
-  @State textOpacity: number = 0;
-  @State textOffset: number = 18;
+  @Local logoScale: number = 0.72;
+  @Local logoOpacity: number = 0;
+  @Local ringScale: number = 0.55;
+  @Local ringOpacity: number = 0.55;
+  @Local textOpacity: number = 0;
+  @Local textOffset: number = 18;
 
   aboutToAppear(): void {
     animateTo({ duration: 620, curve: Curve.Friction }, () => {

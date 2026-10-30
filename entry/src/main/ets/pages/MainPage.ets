@@ -1,6 +1,8 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { DetailParam } from '../common/base/DetailParam';
+import { RepositoryFactory } from '../repository/RepositoryFactory';
+import { LogUtil } from '../common/utils/LogUtil';
 import { SplashView } from '../components/SplashView';
 import { HomePage } from './HomePage';
 import { TrafficMapPage } from './TrafficMapPage';
@@ -13,16 +15,29 @@ import { FavoritePage } from './FavoritePage';
 import { AboutPage } from './AboutPage';
 
 @Entry
-@Component
+@ComponentV2
 struct MainPage {
-  @State currentIndex: number = 0;
-  @State showSplash: boolean = true;
-  @State splashOpacity: number = 1;
-  @Provide('pathStack') pathStack: NavPathStack = new NavPathStack();
+  @Local currentIndex: number = 0;
+  @Local showSplash: boolean = true;
+  @Local splashOpacity: number = 1;
+  // V2 说明：此处原本是 @Provide('pathStack')，但全工程无 @Consume 消费它
+  // 路由实际由 NavRouter.bind() 静态注入，故改为普通成员
+  pathStack: NavPathStack = new NavPathStack();
 
   aboutToAppear(): void {
     NavRouter.bind(this.pathStack);
     this.playSplash();
+    this.detectDataSource();
+  }
+
+  /**
+   * 启动时探测后端是否可用（AUTO 模式生效）
+   * 探测为异步，未完成时页面先用本地仿真数据，探测完成后下次刷新自动切换
+   */
+  private detectDataSource(): void {
+    RepositoryFactory.probeRemote().then((available: boolean) => {
+      LogUtil.info('MainPage', available ? '已切换到远程数据源' : '未连接远程，继续使用本地仿真数据');
+    });
   }
 
   private playSplash(): void {

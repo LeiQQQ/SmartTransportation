@@ -1,0 +1,4 @@
+# 占位：存储层（P1 先用 JSON，P2 换 SQLite）
+# jsonStore.ts → sqlite.ts
+# 表：intersection / approach / road_segment / signal_plan / signal_phase
+#     flow_record / evaluation / traffic_event

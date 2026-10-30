@@ -19,20 +19,20 @@ interface EvalRow {
 /**
  * 信号配时看板：相位甘特图 + 优化前后对比
  */
-@Component
+@ComponentV2
 export struct SignalPlanPage {
-  @Prop intersectionId: string = '';
-  @Prop scenario: string = '早高峰';
+  @Param intersectionId: string = '';
+  @Param scenario: string = '早高峰';
 
-  @State itName: string = '路口';
-  @State phases: SignalPhase[] = [];
-  @State cycle: number = 0;
-  @State beforeCycle: number = 0;
-  @State lostTime: number = 0;
-  @State planName: string = '';
-  @State optimized: boolean = false;
-  @State rows: EvalRow[] = [];
-  @State scenarioIndex: number = 0;
+  @Local itName: string = '路口';
+  @Local phases: SignalPhase[] = [];
+  @Local cycle: number = 0;
+  @Local beforeCycle: number = 0;
+  @Local lostTime: number = 0;
+  @Local planName: string = '';
+  @Local optimized: boolean = false;
+  @Local rows: EvalRow[] = [];
+  @Local scenarioIndex: number = 0;
 
   private scenarios: string[] = ['早高峰', '平峰', '晚高峰'];
 
