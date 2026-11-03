@@ -47,6 +47,8 @@ export struct EventReportPage {
       return;
     }
     this.submitting = true;
+    // 写操作前确保探测完成：AUTO 模式下避免后端其实可用、却把事件写进了本地
+    await RepositoryFactory.probeOnce();
     const type: number = this.types[this.typeIndex];
     const roadName: string = this.roadIndex < this.roadNames.length ? this.roadNames[this.roadIndex] : '';
     const input: CreateEventInput = {
@@ -60,7 +62,8 @@ export struct EventReportPage {
     };
     try {
       await RepositoryFactory.getTrafficRepository().createEvent(input);
-      ToastUtil.show('上报成功');
+      const offline: boolean = RepositoryFactory.isOffline();
+      ToastUtil.show(offline ? '已保存到本地（离线模式）' : '上报成功，已同步至服务端');
       NavRouter.back();
     } catch (e) {
       LogUtil.warn('EventReport', 'createEvent failed: ' + (e as Error).message);

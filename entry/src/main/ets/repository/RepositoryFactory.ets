@@ -27,6 +27,8 @@ export class RepositoryFactory {
   private static probed: boolean = false;
   /** 探测结果：远程是否可用 */
   private static remoteAvailable: boolean = false;
+  /** 进行中的探测（避免并发重复探测） */
+  private static probing: Promise<boolean> | undefined = undefined;
 
   static getTrafficRepository(): ITrafficRepository {
     const mode: string = AppConstants.DATA_SOURCE_MODE;
@@ -44,18 +46,55 @@ export class RepositoryFactory {
     return RepositoryFactory.mockInstance();
   }
 
-  /** 探测后端是否可用，返回 true 表示后续走远程数据源 */
+  /**
+   * 逐个探测候选地址，第一个 /health 成功的锁定为 BASE_URL
+   * @returns true 表示后续走远程数据源
+   */
   static async probeRemote(): Promise<boolean> {
-    try {
-      const response = await HttpUtil.get<HealthData>('/health');
-      RepositoryFactory.remoteAvailable = response.code === 0 && response.data?.status === 'ok';
-    } catch (error) {
+    if (AppConstants.DATA_SOURCE_MODE === 'MOCK') {
+      RepositoryFactory.probed = true;
       RepositoryFactory.remoteAvailable = false;
+      return false;
     }
+    const candidates: string[] = AppConstants.BASE_URL_CANDIDATES;
+    for (let i = 0; i < candidates.length; i++) {
+      const url: string = candidates[i];
+      AppConstants.BASE_URL = url;
+      try {
+        const response = await HttpUtil.get<HealthData>('/health', AppConstants.PROBE_TIMEOUT_MS);
+        if (response.code === 0 && response.data?.status === 'ok') {
+          RepositoryFactory.remoteAvailable = true;
+          RepositoryFactory.probed = true;
+          LogUtil.info(RepositoryFactory.TAG, '远程数据源可用：' + url);
+          return true;
+        }
+      } catch (error) {
+        LogUtil.warn(RepositoryFactory.TAG, '探测失败：' + url);
+      }
+    }
+    AppConstants.BASE_URL = candidates[0];
+    RepositoryFactory.remoteAvailable = false;
     RepositoryFactory.probed = true;
-    LogUtil.info(RepositoryFactory.TAG,
-      RepositoryFactory.remoteAvailable ? '远程数据源可用' : '远程数据源不可用，使用本地仿真数据');
-    return RepositoryFactory.remoteAvailable;
+    LogUtil.info(RepositoryFactory.TAG, '远程数据源不可用，使用本地仿真数据');
+    return false;
+  }
+
+  /**
+   * 确保探测已完成（并发调用只执行一次）
+   * 写操作前调用：避免"还没探测完就把数据写进本地"，导致重启后与后端不一致
+   */
+  static probeOnce(): Promise<boolean> {
+    if (RepositoryFactory.probing !== undefined) {
+      return RepositoryFactory.probing;
+    }
+    if (RepositoryFactory.probed) {
+      return Promise.resolve(RepositoryFactory.remoteAvailable);
+    }
+    RepositoryFactory.probing = RepositoryFactory.probeRemote().then((available: boolean) => {
+      RepositoryFactory.probing = undefined;
+      return available;
+    });
+    return RepositoryFactory.probing;
   }
 
   /** 当前是否处于离线（本地仿真）状态，用于首页提示条 */

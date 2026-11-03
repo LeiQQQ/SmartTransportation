@@ -37,7 +37,7 @@
   （⚠️ 时段切换当前不参与计算；四项指标中通行量、停车次数为演示性估算值）
 - **拥堵态势分级**：饱和度 v/c 五级色阶（畅通 / 基本畅通 / 轻度 / 中度 / 严重）
 - **事件中心**：事故、施工、管制、拥堵四类事件，支持列表与类型筛选；
-  上报后写后端 SQLite（`node:sqlite`），重启不丢、多设备共享，列表 10 s 自动刷新
+  上报写后端 SQLite（`node:sqlite`），重启不丢、多设备共享；离线时落端侧 preferences（上限 50 条）；列表 10 s 自动刷新
 - **离线可用**：Repository 抽象 + Mock 数据源，无网络或无后端时完整演示
 - **收藏与个性化**：preferences 持久化收藏路口
 
@@ -130,14 +130,30 @@ SmartTransportation/
 2. 连接模拟器或真机
 3. 运行 `entry` 模块
 
-默认使用本地仿真数据（`AppConstants.USE_REMOTE = false`），无需后端即可完整演示。
+默认 `AUTO` 模式：启动时逐个探测候选地址的 `/health`，连上走远程，连不上自动回落本地仿真，**断网也能完整演示**。
+
+### 联调（连后端，验证持久化与多设备共享）
+
+```bash
+cd server && npm install && npm run dev    # 监听 0.0.0.0:8080
+```
+
+1. 手机/模拟器与电脑连**同一 WiFi**
+2. 把电脑局域网 IP 填到 `AppConstants.BASE_URL_CANDIDATES` 第一项（Windows：`ipconfig` 查 IPv4）
+3. Windows 防火墙放行 Node 的 8080（首次启动弹窗选「专用网络」）
+4. 首页**不再显示「当前为离线仿真数据」**= 已连上后端
+5. 上报一条事件 → 杀掉 App 重进 → 事件仍在；`server/data/store.db` 里可查到该条
+
+> 连不上后端时上报也不会丢：事件落端侧 preferences（上限 50 条），Toast 会提示「已保存到本地（离线模式）」，
+> 与「上报成功，已同步至服务端」区分开，避免误以为已经跨设备共享。
 
 ### 可调参数
 
 | 配置 | 位置 | 说明 |
 | --- | --- | --- |
-| `USE_REMOTE` | `common/constants/AppConstants.ets` | 预留开关，**当前未接线**，`RepositoryFactory` 恒返回 Mock |
-| `BASE_URL` | 同上 | 后端地址（模拟器用 `10.0.2.2`，真机用局域网 IP） |
+| `DATA_SOURCE_MODE` | `common/constants/AppConstants.ets` | `MOCK`（离线）/ `AUTO`（默认，探测后切换）/ `REMOTE`（硬连） |
+| `BASE_URL_CANDIDATES` | 同上 | 候选后端地址，按顺序探测，首个 `/health` 成功者被锁定 |
+| `BASE_URL` | 同上 | 当前生效地址（由探测写入，勿手改） |
 | `MAP_MODE` | 同上 | 预留常量，当前无渲染实现 |
 | `REFRESH_FLOW_MS` | 同上 | 路况刷新间隔，默认 5000ms |
 | `ANIMATION_FRAME_MS` | 同上 | 车流动画帧间隔，默认 200ms |

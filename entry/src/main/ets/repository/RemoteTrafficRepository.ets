@@ -7,6 +7,7 @@ import { CreateEventInput, TrafficEvent } from '../model/TrafficEvent';
 import { HttpUtil } from '../common/utils/HttpUtil';
 import { LogUtil } from '../common/utils/LogUtil';
 import { XianWallMock } from '../mock/XianWallMock';
+import { EventStore } from '../common/utils/EventStore';
 import { CreateEventData, EventsData, FlowsData, IntersectionsData, SegmentsData } from './dto/RemoteDtos';
 
 /**
@@ -91,13 +92,19 @@ export class RemoteTrafficRepository implements ITrafficRepository {
     }
   }
 
+  /**
+   * 列表 = 离线期间上报的本地事件 + 服务端事件
+   * 不会重复：在线上报只写服务端，不写本地（见 createEvent）
+   */
   async getEvents(): Promise<TrafficEvent[]> {
+    const local: TrafficEvent[] = await EventStore.list();
     try {
       const response = await HttpUtil.get<EventsData>('/events');
-      return response.data?.events ?? [];
+      const remote: TrafficEvent[] = response.data?.events ?? [];
+      return local.concat(remote);
     } catch (error) {
       RemoteTrafficRepository.logFallback('getEvents');
-      return XianWallMock.getEvents();
+      return local.concat(XianWallMock.getEvents());
     }
   }
 

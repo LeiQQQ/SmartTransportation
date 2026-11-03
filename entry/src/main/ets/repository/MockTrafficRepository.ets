@@ -5,6 +5,7 @@ import { SignalPlan } from '../model/SignalPlan';
 import { Evaluation } from '../model/Evaluation';
 import { CreateEventInput, TrafficEvent } from '../model/TrafficEvent';
 import { XianWallMock } from '../mock/XianWallMock';
+import { EventStore } from '../common/utils/EventStore';
 
 /**
  * 本地仿真数据实现：无后端时保证全流程可用
@@ -53,13 +54,13 @@ export class MockTrafficRepository implements ITrafficRepository {
 
   async getEvents(): Promise<TrafficEvent[]> {
     await this.delay(60);
-    const submitted: TrafficEvent[] = MockTrafficRepository.submitted;
-    return submitted.concat(XianWallMock.getEvents());
+    const local: TrafficEvent[] = await EventStore.list();
+    return local.concat(XianWallMock.getEvents());
   }
 
   /**
-   * MOCK 模式下没有后端，上报的事件只能存内存：
-   * 当次运行可见、重启即失效——要跨设备共享必须切 REMOTE（写后端 SQLite）
+   * MOCK 模式：写端侧 preferences（`local_reported_events`，上限 50 条）
+   * 断网时"上报 → 重启仍在"，联网后仍会合并展示；在线上报只写服务端，不产生重复
    */
   async createEvent(input: CreateEventInput): Promise<TrafficEvent> {
     await this.delay(80);
@@ -74,9 +75,7 @@ export class MockTrafficRepository implements ITrafficRepository {
       impact: input.impact ?? 1,
       createTime: Date.now()
     };
-    MockTrafficRepository.submitted.unshift(event);
+    await EventStore.add(event);
     return event;
   }
-
-  private static submitted: TrafficEvent[] = [];
 }

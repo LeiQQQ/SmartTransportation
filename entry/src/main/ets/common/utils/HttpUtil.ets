@@ -18,17 +18,18 @@ export class HttpUtil {
   private static readonly TAG: string = 'HttpUtil';
 
   /** GET 请求，path 形如 '/signal/evaluation/INT_10?scenario=%E6%97%A9%E9%AB%98%E5%B3%B0' */
-  static get<T>(path: string): Promise<ApiResponse<T>> {
-    return HttpUtil.request<T>(http.RequestMethod.GET, path, '');
+  static get<T>(path: string, timeoutMs: number = AppConstants.HTTP_TIMEOUT_MS): Promise<ApiResponse<T>> {
+    return HttpUtil.request<T>(http.RequestMethod.GET, path, '', timeoutMs);
   }
 
   /** POST 请求，bodyJson 为已序列化的 JSON 字符串，无 body 时留空 */
-  static post<T>(path: string, bodyJson: string = ''): Promise<ApiResponse<T>> {
-    return HttpUtil.request<T>(http.RequestMethod.POST, path, bodyJson);
+  static post<T>(path: string, bodyJson: string = '',
+    timeoutMs: number = AppConstants.HTTP_TIMEOUT_MS): Promise<ApiResponse<T>> {
+    return HttpUtil.request<T>(http.RequestMethod.POST, path, bodyJson, timeoutMs);
   }
 
   private static request<T>(method: http.RequestMethod, path: string,
-    bodyJson: string): Promise<ApiResponse<T>> {
+    bodyJson: string, timeoutMs: number): Promise<ApiResponse<T>> {
     return new Promise<ApiResponse<T>>(
       (resolve: (value: ApiResponse<T>) => void, reject: (reason: Error) => void) => {
         const request: http.HttpRequest = http.createHttp();
@@ -38,8 +39,8 @@ export class HttpUtil {
           method: method,
           header: { 'Content-Type': 'application/json' },
           expectDataType: http.HttpDataType.STRING,
-          connectTimeout: AppConstants.HTTP_TIMEOUT_MS,
-          readTimeout: AppConstants.HTTP_TIMEOUT_MS
+          connectTimeout: timeoutMs,
+          readTimeout: timeoutMs
         };
         if (bodyJson !== '') {
           options.extraData = bodyJson;
