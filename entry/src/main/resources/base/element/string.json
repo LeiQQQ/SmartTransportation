@@ -2,7 +2,7 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "智行西安 · 片区信号优化与态势感知"
+      "value": "基于HarmonyOS车流自适应信号灯系统设计与开发 · 片区信号优化与态势感知"
     },
     {
       "name": "EntryAbility_desc",
@@ -10,7 +10,7 @@
     },
     {
       "name": "EntryAbility_label",
-      "value": "智行西安"
+      "value": "车流自适应"
     }
   ]
 }

@@ -2,7 +2,7 @@
   "name": "smart-transportation-server",
   "version": "0.1.0",
   "private": true,
-  "description": "智行西安 · 片区信号配时优化后端服务（Node + TypeScript）",
+  "description": "基于HarmonyOS车流自适应信号灯系统设计与开发 · 片区信号配时优化后端服务（Node + TypeScript）",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",

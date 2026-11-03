@@ -34,7 +34,7 @@ export struct MinePage {
       Column() {
         Row() {
           Column() {
-            Text('智行西安')
+            Text('车流自适应信号灯系统')
               .fontSize(20)
               .fontWeight(FontWeight.Bold)
               .fontColor(ThemeConstants.TEXT_INVERT)

@@ -8,7 +8,7 @@ import signalRoutes from './routes/signal.js';
 import eventRoutes from './routes/event.js';
 
 /**
- * 智慧交通后端服务入口
+ * 基于HarmonyOS车流自适应信号灯系统设计与开发 · 后端服务入口
  *
  * 分层：routes（接口）→ service（业务）→ source（数据源）+ algo（算法）
  * 接口前缀 /api/v1，统一响应 { code, message, data, timestamp }

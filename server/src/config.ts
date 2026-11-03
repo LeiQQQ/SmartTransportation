@@ -10,7 +10,7 @@
 /** 研究区域 */
 export const AREA = {
   NAME: '西安城墙内',
-  DESC: '约 11.3 km²，15 个信号路口'
+  DESC: '约 11.3 km²，20 个信号路口'
 } as const;
 
 /** 交通流与指标参数 */
