@@ -3,7 +3,7 @@ import { Intersection, RoadSegment } from '../model/Intersection';
 import { AreaTrafficIndex, FlowRecord } from '../model/FlowRecord';
 import { SignalPlan } from '../model/SignalPlan';
 import { Evaluation } from '../model/Evaluation';
-import { TrafficEvent } from '../model/TrafficEvent';
+import { CreateEventInput, TrafficEvent } from '../model/TrafficEvent';
 import { XianWallMock } from '../mock/XianWallMock';
 
 /**
@@ -53,6 +53,30 @@ export class MockTrafficRepository implements ITrafficRepository {
 
   async getEvents(): Promise<TrafficEvent[]> {
     await this.delay(60);
-    return XianWallMock.getEvents();
+    const submitted: TrafficEvent[] = MockTrafficRepository.submitted;
+    return submitted.concat(XianWallMock.getEvents());
   }
+
+  /**
+   * MOCK 模式下没有后端，上报的事件只能存内存：
+   * 当次运行可见、重启即失效——要跨设备共享必须切 REMOTE（写后端 SQLite）
+   */
+  async createEvent(input: CreateEventInput): Promise<TrafficEvent> {
+    await this.delay(80);
+    const event: TrafficEvent = {
+      id: `L${Date.now()}`,
+      type: input.type,
+      title: input.title,
+      description: input.description ?? '',
+      roadName: input.roadName ?? '',
+      longitude: input.longitude ?? 0,
+      latitude: input.latitude ?? 0,
+      impact: input.impact ?? 1,
+      createTime: Date.now()
+    };
+    MockTrafficRepository.submitted.unshift(event);
+    return event;
+  }
+
+  private static submitted: TrafficEvent[] = [];
 }

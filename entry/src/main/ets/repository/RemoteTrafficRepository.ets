@@ -3,11 +3,11 @@ import { Intersection, RoadSegment } from '../model/Intersection';
 import { AreaTrafficIndex, FlowRecord } from '../model/FlowRecord';
 import { SignalPlan } from '../model/SignalPlan';
 import { Evaluation } from '../model/Evaluation';
-import { TrafficEvent } from '../model/TrafficEvent';
+import { CreateEventInput, TrafficEvent } from '../model/TrafficEvent';
 import { HttpUtil } from '../common/utils/HttpUtil';
 import { LogUtil } from '../common/utils/LogUtil';
 import { XianWallMock } from '../mock/XianWallMock';
-import { EventsData, FlowsData, IntersectionsData, SegmentsData } from './dto/RemoteDtos';
+import { CreateEventData, EventsData, FlowsData, IntersectionsData, SegmentsData } from './dto/RemoteDtos';
 
 /**
  * 远程数据源实现：调用后端 /api/v1 接口
@@ -99,6 +99,27 @@ export class RemoteTrafficRepository implements ITrafficRepository {
       RemoteTrafficRepository.logFallback('getEvents');
       return XianWallMock.getEvents();
     }
+  }
+
+  /**
+   * 上报事件：写操作，失败直接抛错给页面提示
+   * 不做降级——不能把"没写到服务端"伪装成提交成功
+   */
+  async createEvent(input: CreateEventInput): Promise<TrafficEvent> {
+    const body: string = JSON.stringify(input);
+    const response = await HttpUtil.post<CreateEventData>('/events', body);
+    const event: TrafficEvent = {
+      id: response.data?.id ?? '',
+      type: input.type,
+      title: input.title,
+      description: input.description ?? '',
+      roadName: input.roadName ?? '',
+      longitude: input.longitude ?? 0,
+      latitude: input.latitude ?? 0,
+      impact: input.impact ?? 1,
+      createTime: Date.now()
+    };
+    return event;
   }
 
   /** 记录降级动作；具体失败原因见 HttpUtil 的 warn 日志 */

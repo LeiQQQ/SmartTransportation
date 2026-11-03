@@ -2,7 +2,7 @@ import { Intersection, RoadSegment } from '../model/Intersection';
 import { AreaTrafficIndex, FlowRecord } from '../model/FlowRecord';
 import { SignalPlan } from '../model/SignalPlan';
 import { Evaluation } from '../model/Evaluation';
-import { TrafficEvent } from '../model/TrafficEvent';
+import { CreateEventInput, TrafficEvent } from '../model/TrafficEvent';
 
 /**
  * 交通数据仓库抽象
@@ -24,4 +24,7 @@ export interface ITrafficRepository {
   getEvaluation(intersectionId: string, scenario: string): Promise<Evaluation>;
 
   getEvents(): Promise<TrafficEvent[]>;
+
+  /** 上报事件：REMOTE 落后端数据库，MOCK 存内存（仅当次运行可见） */
+  createEvent(input: CreateEventInput): Promise<TrafficEvent>;
 }

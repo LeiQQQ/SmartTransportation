@@ -2,7 +2,8 @@ import { ThemeConstants } from '../common/constants/ThemeConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { ToastUtil } from '../common/utils/ToastUtil';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
-import { EventTypeUtil } from '../model/TrafficEvent';
+import { CreateEventInput, EventTypeUtil } from '../model/TrafficEvent';
+import { LogUtil } from '../common/utils/LogUtil';
 import { Intersection } from '../model/Intersection';
 
 /**
@@ -40,17 +41,33 @@ export struct EventReportPage {
     this.roadOptions = options;
   }
 
-  private submit(): void {
+  private async submit(): Promise<void> {
     if (this.desc.length === 0) {
       ToastUtil.show('请填写事件描述');
       return;
     }
     this.submitting = true;
-    setTimeout(() => {
-      this.submitting = false;
-      ToastUtil.show('已提交，审核通过后同步至片区其他用户');
+    const type: number = this.types[this.typeIndex];
+    const roadName: string = this.roadIndex < this.roadNames.length ? this.roadNames[this.roadIndex] : '';
+    const input: CreateEventInput = {
+      type: type,
+      title: EventTypeUtil.nameOf(type) + (roadName.length > 0 ? '·' + roadName : ''),
+      description: this.desc,
+      roadName: roadName,
+      impact: this.impact + 1,
+      longitude: 0,
+      latitude: 0
+    };
+    try {
+      await RepositoryFactory.getTrafficRepository().createEvent(input);
+      ToastUtil.show('上报成功');
       NavRouter.back();
-    }, 600);
+    } catch (e) {
+      LogUtil.warn('EventReport', 'createEvent failed: ' + (e as Error).message);
+      ToastUtil.show('上报失败，请检查网络后重试');
+    } finally {
+      this.submitting = false;
+    }
   }
 
   build() {

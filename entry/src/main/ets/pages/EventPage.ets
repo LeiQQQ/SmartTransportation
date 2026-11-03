@@ -14,8 +14,21 @@ export struct EventPage {
 
   private filters: number[] = [-1, 0, 3, 1, 2];
 
+  private timerId: number = -1;
+
   aboutToAppear(): void {
     this.loadData();
+    // 事件是跨设备共享数据：定时拉取，其他设备上报的事件可自动出现（10 s）
+    this.timerId = setInterval(() => {
+      this.loadData();
+    }, 10000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.timerId >= 0) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
+    }
   }
 
   async loadData(): Promise<void> {

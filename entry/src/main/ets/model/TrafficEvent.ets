@@ -22,6 +22,17 @@ export interface TrafficEvent {
   createTime: number;
 }
 
+/** 事件上报入参（与后端 CreateEventInput 一致） */
+export interface CreateEventInput {
+  type: number;
+  title: string;
+  description?: string;
+  roadName?: string;
+  longitude?: number;
+  latitude?: number;
+  impact?: number;
+}
+
 export class EventTypeUtil {
   static nameOf(type: number): string {
     switch (type) {

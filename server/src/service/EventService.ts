@@ -1,21 +1,77 @@
+import { db } from '../store/sqlite.js';
 import type { CreateEventInput, TrafficEvent } from '../types/index.js';
+
+/** 事件表行结构（列名为 snake_case） */
+interface EventRow {
+  id: string;
+  type: number;
+  title: string;
+  road_name: string;
+  longitude: number;
+  latitude: number;
+  impact: number;
+  description: string;
+  create_time: number;
+}
+
+const INSERT_SQL: string =
+  'INSERT INTO event (id, type, title, road_name, longitude, latitude, impact, description, create_time) ' +
+  'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
 /**
  * 交通事件业务
- * P1 阶段使用内存存储（重启后回到初始演示数据），P2 落库 SQLite 后改为持久化
+ *
+ * 数据落 SQLite（server/data/store.db）：
+ * - 服务重启不丢失（区别于 P1 的内存数组）
+ * - 多台设备访问同一后端即可看到同一份事件（数据互通）
  */
 export class EventService {
-  private events: TrafficEvent[] = EventService.seed();
+  constructor() {
+    this.seedIfEmpty();
+  }
+
+  /** 表为空时写入 4 条演示事件；已有数据则跳过，避免每次重启重复插入 */
+  private seedIfEmpty(): void {
+    const row = db.prepare('SELECT COUNT(*) AS n FROM event').get() as { n: number } | undefined;
+    if ((row?.n ?? 0) > 0) {
+      return;
+    }
+    const stmt = db.prepare(INSERT_SQL);
+    for (const event of EventService.seed()) {
+      stmt.run(
+        event.id, event.type, event.title, event.roadName,
+        event.longitude, event.latitude, event.impact,
+        event.description, event.createTime
+      );
+    }
+  }
 
   /** @param type 事件类型过滤，undefined 表示全部 */
   list(type: number | undefined, page: number = 1, size: number = 20): { events: TrafficEvent[]; total: number } {
-    const filtered: TrafficEvent[] = type === undefined
-      ? this.events
-      : this.events.filter((event) => event.type === type);
+    const safePage: number = page < 1 ? 1 : page;
+    const safeSize: number = size < 1 ? 20 : size;
+    const offset: number = (safePage - 1) * safeSize;
 
-    const sorted: TrafficEvent[] = [...filtered].sort((a, b) => b.createTime - a.createTime);
-    const start: number = (page - 1) * size;
-    return { events: sorted.slice(start, start + size), total: filtered.length };
+    const countSql: string = type === undefined
+      ? 'SELECT COUNT(*) AS n FROM event'
+      : 'SELECT COUNT(*) AS n FROM event WHERE type = ?';
+    const countRow = (type === undefined
+      ? db.prepare(countSql).get()
+      : db.prepare(countSql).get(type)) as { n: number } | undefined;
+    const total: number = countRow?.n ?? 0;
+
+    const pageSql: string = type === undefined
+      ? 'SELECT * FROM event ORDER BY create_time DESC LIMIT ? OFFSET ?'
+      : 'SELECT * FROM event WHERE type = ? ORDER BY create_time DESC LIMIT ? OFFSET ?';
+    const rows = (type === undefined
+      ? db.prepare(pageSql).all(safeSize, offset)
+      : db.prepare(pageSql).all(type, safeSize, offset)) as unknown as EventRow[];
+
+    const events: TrafficEvent[] = [];
+    for (const row of rows) {
+      events.push(EventService.toEvent(row));
+    }
+    return { events: events, total: total };
   }
 
   create(input: CreateEventInput): TrafficEvent {
@@ -30,8 +86,26 @@ export class EventService {
       impact: input.impact ?? 1,
       createTime: Date.now()
     };
-    this.events.push(event);
+    db.prepare(INSERT_SQL).run(
+      event.id, event.type, event.title, event.roadName,
+      event.longitude, event.latitude, event.impact,
+      event.description, event.createTime
+    );
     return event;
+  }
+
+  private static toEvent(row: EventRow): TrafficEvent {
+    return {
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      description: row.description,
+      roadName: row.road_name,
+      longitude: row.longitude,
+      latitude: row.latitude,
+      impact: row.impact,
+      createTime: row.create_time
+    };
   }
 
   /** 初始演示事件，与端侧 XianWallMock.getEvents() 一致 */
