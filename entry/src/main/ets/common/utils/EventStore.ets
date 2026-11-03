@@ -1,4 +1,4 @@
-import { TrafficEvent } from '../model/TrafficEvent';
+import { TrafficEvent } from '../../model/TrafficEvent';
 import { PreferencesUtil } from './PreferencesUtil';
 
 /**
