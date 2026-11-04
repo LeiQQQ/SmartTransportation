@@ -5,6 +5,9 @@
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {}
+  "dependencies": {
+    "@bdmap/base": "2.0.7",
+    "@bdmap/map": "2.0.7"
+  }
 }
 

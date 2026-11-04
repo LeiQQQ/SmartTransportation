@@ -31,6 +31,23 @@ export class AppConstants {
   /** 地图渲染模式：'TOPOLOGY' 拓扑图（默认，零依赖） | 'MAP_KIT' 花瓣地图 */
   static readonly MAP_MODE: string = 'TOPOLOGY';
 
+  /**
+   * 百度地图鸿蒙 SDK AK（应用类型：鸿蒙 SDK，AK 与 AGC 的 AppID 绑定）
+   * 为空 = 不初始化 SDK，路况图自动回落 Canvas 自绘（演示不依赖百度底图）
+   */
+  static readonly BAIDU_MAP_AK: string = '';
+
+  /**
+   * 路况图渲染引擎：'AUTO' 有百度 AK 用 SDK 底图（道路与百度一致），否则 Canvas 自绘
+   * 'CANVAS' 强制自绘；'BAIDU' 强制 SDK（AK 为空时仍回落）
+   */
+  static readonly MAP_ENGINE: string = 'AUTO';
+
+  /** 片区初始视野：钟楼附近中心点与缩放级别（bd09 坐标由 SDK 内部处理基准差异） */
+  static readonly MAP_CENTER_LON: number = 108.9495;
+  static readonly MAP_CENTER_LAT: number = 34.2615;
+  static readonly MAP_ZOOM: number = 14.5;
+
   /** 刷新间隔（毫秒） */
   static readonly REFRESH_INDEX_MS: number = 30000;
   static readonly REFRESH_FLOW_MS: number = 5000;

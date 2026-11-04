@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "车流自适应"
+    },
+    {
+      "name": "reason_tracking",
+      "value": "百度地图 SDK 用于加载底图与实时路况图层"
     }
   ]
 }

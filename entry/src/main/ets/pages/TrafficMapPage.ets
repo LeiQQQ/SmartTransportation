@@ -8,6 +8,7 @@ import { Intersection, RoadSegment } from '../model/Intersection';
 import { FlowRecord } from '../model/FlowRecord';
 import { RealtimeRoad } from '../model/RealtimeRoad';
 import { LonLat, MapGeometry } from '../common/constants/MapGeometry';
+import { BaiduMapView } from '../components/BaiduMapView';
 
 /** 地图配色：仅本页绘制使用，模拟导航地图的观感 */
 const MAP_BG: string = '#F4F1EA';
@@ -53,7 +54,10 @@ export struct TrafficMapPage {
   /** 每条路段的拥堵度（与 segments 同序），含邻路传播 */
   private congestion: number[] = [];
   /** 百度实测路况：segId → 三档 level；空 Map = 用仿真 */
-  private realLevels: Map<string, number> = new Map();
+  @Local realLevels: Map<string, number> = new Map();
+  /** 路况图引擎：AUTO 且配置了百度 AK 时用 SDK 底图（道路与百度一致），否则 Canvas 自绘 */
+  @Local useBaidu: boolean = AppConstants.MAP_ENGINE === 'BAIDU'
+    || (AppConstants.MAP_ENGINE === 'AUTO' && AppConstants.BAIDU_MAP_AK.length > 0);
 
   aboutToAppear(): void {
     this.loadAll();
@@ -542,65 +546,79 @@ export struct TrafficMapPage {
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 8 })
 
-      Stack({ alignContent: Alignment.TopStart }) {
-        Canvas(this.ctx)
-          .width('100%')
-          .height('100%')
-          .onReady(() => {
-            this.ready = true;
-            this.draw();
+      if (this.useBaidu) {
+        // 百度 SDK 底图：道路形状与百度地图一致，官方路况图层 + 三档色带叠加
+        Stack({ alignContent: Alignment.TopStart }) {
+          BaiduMapView({
+            segments: this.segments,
+            intersections: this.intersections,
+            levels: this.realLevels
           })
+        }
+        .width('100%')
+        .layoutWeight(1)
+      } else {
+        // Canvas 自绘引擎（零 SDK 依赖）：AK 未配置 / SDK 初始化失败时的降级路径
+        Stack({ alignContent: Alignment.TopStart }) {
+          Canvas(this.ctx)
+            .width('100%')
+            .height('100%')
+            .onReady(() => {
+              this.ready = true;
+              this.draw();
+            })
 
-        // 路口节点（绝对定位，便于点击）
-        ForEach(this.intersections, (item: Intersection) => {
-          Stack() {
-            Circle()
-              .width(this.nodeSize(item.id))
-              .height(this.nodeSize(item.id))
-              .fill(ThemeConstants.BG_CARD)
-              .stroke(NODE_EDGE)
-              .strokeWidth(1.6)
-          }
-          .width(24)
-          .height(24)
-          .position({
-            x: this.nodeX(item) - 12,
-            y: this.nodeY(item) - 12
-          })
-          .onClick(() => {
-            NavRouter.toIntersection(item.id);
-          })
-        }, (item: Intersection) => item.id)
-      }
-      .width('100%')
-      .layoutWeight(1)
-      .scale({ x: this.scaleValue, y: this.scaleValue })
-      .translate({ x: this.offsetX, y: this.offsetY })
-      .gesture(
-        GestureGroup(GestureMode.Parallel,
-          PinchGesture({ fingers: 2 })
-            .onActionStart(() => {
-              this.baseScale = this.scaleValue;
+          // 路口节点（绝对定位，便于点击）
+          ForEach(this.intersections, (item: Intersection) => {
+            Stack() {
+              Circle()
+                .width(this.nodeSize(item.id))
+                .height(this.nodeSize(item.id))
+                .fill(ThemeConstants.BG_CARD)
+                .stroke(NODE_EDGE)
+                .strokeWidth(1.6)
+            }
+            .width(24)
+            .height(24)
+            .position({
+              x: this.nodeX(item) - 12,
+              y: this.nodeY(item) - 12
             })
-            .onActionUpdate((event: GestureEvent) => {
-              this.scaleValue = Math.max(0.8, Math.min(3, this.baseScale * event.scale));
-            }),
-          PanGesture({ fingers: 1 })
-            .onActionStart(() => {
-              this.baseX = this.offsetX;
-              this.baseY = this.offsetY;
+            .onClick(() => {
+              NavRouter.toIntersection(item.id);
             })
-            .onActionUpdate((event: GestureEvent) => {
-              this.offsetX = this.baseX + event.offsetX;
-              this.offsetY = this.baseY + event.offsetY;
-            })
+          }, (item: Intersection) => item.id)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .scale({ x: this.scaleValue, y: this.scaleValue })
+        .translate({ x: this.offsetX, y: this.offsetY })
+        .gesture(
+          GestureGroup(GestureMode.Parallel,
+            PinchGesture({ fingers: 2 })
+              .onActionStart(() => {
+                this.baseScale = this.scaleValue;
+              })
+              .onActionUpdate((event: GestureEvent) => {
+                this.scaleValue = Math.max(0.8, Math.min(3, this.baseScale * event.scale));
+              }),
+            PanGesture({ fingers: 1 })
+              .onActionStart(() => {
+                this.baseX = this.offsetX;
+                this.baseY = this.offsetY;
+              })
+              .onActionUpdate((event: GestureEvent) => {
+                this.offsetX = this.baseX + event.offsetX;
+                this.offsetY = this.baseY + event.offsetY;
+              })
+          )
         )
-      )
-      .onAreaChange((oldArea: Area, newArea: Area) => {
-        this.canvasW = newArea.width as number;
-        this.canvasH = newArea.height as number;
-        this.draw();
-      })
+        .onAreaChange((oldArea: Area, newArea: Area) => {
+          this.canvasW = newArea.width as number;
+          this.canvasH = newArea.height as number;
+          this.draw();
+        })
+      }
 
       // 图例
       Row() {
