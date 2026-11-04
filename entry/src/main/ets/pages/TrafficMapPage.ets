@@ -34,11 +34,28 @@ const NODE_FILL: string = '#FFFFFF';
 const NODE_EDGE: string = '#8E8A83';
 /** 路名标注的最短屏幕长度（vp）：太短的路段不标，避免文字压过道路 */
 const MIN_LABEL_LEN: number = 32;
-/**
- * 显示名称的路口：只保留 3 个关键节点，中心区不叠字
- * 编号对应 XianWallMock：INT_01 钟楼 / INT_10 五路口 / INT_09 大差市
- */
-const NODE_LABELS: string[] = ['INT_01', 'INT_10', 'INT_09'];
+/** 拥堵路段的最短标注长度：比普通路段放宽，保证"哪条堵了"一定有名字 */
+const MIN_ALERT_LABEL_LEN: number = 16;
+/** 拥堵路名与拥堵节点名：深红加粗，从满图灰字里跳出来 */
+const LABEL_ALERT: string = '#B3261E';
+/** 拥堵色带外描边：和白色路面拉开对比，红色区域边界更清楚 */
+const TRAFFIC_EDGE: string = 'rgba(150, 32, 26, 0.5)';
+
+/** 标签占位矩形（屏幕坐标），用于路名、节点名互相避让 */
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** 一条待标注的路名（同名道路合并后） */
+interface LabelJob {
+  name: string;
+  seg: RoadSegment;
+  level: number;
+  len: number;
+}
 
 /**
  * 片区路况图：仿真实地图绘制（城墙、绿地、道路走向、路况色带）+ 绝对定位节点
@@ -71,6 +88,8 @@ export struct TrafficMapPage {
   @Local realLevels: Map<string, number> = new Map();
   /** 手动刷新中：按钮显示"刷新中"并禁止重复点击 */
   @Local refreshing: boolean = false;
+  /** 本帧已占用的标签区域：路名与节点名互相避让，避免压字 */
+  private boxes: Box[] = [];
 
   aboutToAppear(): void {
     this.loadAll();
@@ -163,6 +182,7 @@ export struct TrafficMapPage {
       return;
     }
     this.ctx.clearRect(0, 0, this.canvasW, this.canvasH);
+    this.boxes = [];
     this.drawBase();
     this.drawRiver();
     this.drawGreens();
@@ -170,8 +190,9 @@ export struct TrafficMapPage {
     this.congestion = this.computeCongestion();
     this.drawRoads();
     this.drawTraffic();
-    this.drawRoadLabels();
+    // 顺序：先画点并占位 → 再画路名（拥堵优先）→ 最后画节点名，三者互不压字
     this.drawNodeDots();
+    this.drawRoadLabels();
     this.drawNodeLabels();
     this.drawCompass();
   }
@@ -263,6 +284,11 @@ export struct TrafficMapPage {
       // 分级宽度：畅通只留一条淡绿细带（避免整图泛绿），缓行/拥堵逐级加宽突出堵点
       const factor: number = level === 0 ? 0.34 : (level === 1 ? 0.56 : 0.7);
       const width: number = this.roadWidthOf(seg.lanes) * factor;
+      // 拥堵段先描一圈深色外缘，红带边界更明确，和白色路面拉得开
+      if (level === 2) {
+        this.ctx.globalAlpha = 0.5;
+        this.strokePolyline(pts, width + 3.4, TRAFFIC_EDGE, false);
+      }
       this.ctx.globalAlpha = level === 0 ? 0.7 : 0.92;
       this.strokePolyline(pts, width, TrafficUtil.colorOfRoadLevel(level), false);
       this.ctx.globalAlpha = 1;
@@ -324,61 +350,95 @@ export struct TrafficMapPage {
   }
 
   /**
-   * 路名：沿道路方向旋转（百度地图样式），同一路名只标一次（取最长路段的中点）
-   * 白色描边保证压在路况色带上仍清晰；字号按主次区分
+   * 路名：沿道路方向旋转（百度地图样式），同名道路只标一次。
+   *
+   * 排序策略是"能看出哪条堵"的关键：
+   * 拥堵路段先标并优先落在路段正中间，即使图面拥挤也一定要有名字；
+   * 畅通路段后标，落点被占用就换位置，实在挤不下才放弃。
    */
   private drawRoadLabels(): void {
-    // 同名路段合并：只保留屏幕长度最长的一段用于标注
-    const representative: Map<string, RoadSegment> = new Map();
-    const bestLen: Map<string, number> = new Map();
+    const merged: Map<string, LabelJob> = new Map();
     for (let i = 0; i < this.segments.length; i++) {
       const seg: RoadSegment = this.segments[i];
+      // 支路不标名：小比例尺下百度地图也不显示支路名，图面更干净
+      if (!MapGeometry.isTrunk(seg.id)) {
+        continue;
+      }
       const pts: LonLat[] = this.pointsOf(seg);
       if (pts.length < 2) {
         continue;
       }
       const len: number = this.screenLengthOf(pts);
-      const prev: number = bestLen.get(seg.name) ?? -1;
-      if (len > prev) {
-        bestLen.set(seg.name, len);
-        representative.set(seg.name, seg);
+      const level: number = this.levelOfSeg(seg);
+      const prev: LabelJob | undefined = merged.get(seg.name);
+      // 同名道路取"更堵、更长"的一段作为代表
+      if (prev === undefined || level > prev.level || (level === prev.level && len > prev.len)) {
+        merged.set(seg.name, { name: seg.name, seg: seg, level: level, len: len });
       }
     }
-    const names: string[] = [];
-    representative.forEach((_seg: RoadSegment, name: string) => {
-      names.push(name);
+    const jobs: LabelJob[] = [];
+    merged.forEach((job: LabelJob) => {
+      jobs.push(job);
     });
-    for (let k = 0; k < names.length; k++) {
-      const seg: RoadSegment | undefined = representative.get(names[k]);
-      if (seg === undefined) {
+    jobs.sort((a: LabelJob, b: LabelJob) => (b.level - a.level) || (b.len - a.len));
+
+    for (let i = 0; i < jobs.length; i++) {
+      const job: LabelJob = jobs[i];
+      const alert: boolean = job.level >= 2;
+      if (job.len < (alert ? MIN_ALERT_LABEL_LEN : MIN_LABEL_LEN)) {
         continue;
       }
-      const pts: LonLat[] = this.pointsOf(seg);
-      // 支路不标名：小比例尺下百度地图也不显示支路名，图面更干净
-      if (!MapGeometry.isTrunk(seg.id)) {
-        continue;
-      }
-      const len: number = bestLen.get(names[k]) ?? 0;
-      // 太短的路段不标，避免文字压过路本身
-      if (len < MIN_LABEL_LEN) {
-        continue;
-      }
-      const mid: LonLat = this.pointAt(pts, 0.38);
-      const x: number = AreaConstants.lonToX(mid.lon, this.canvasW);
-      const y: number = AreaConstants.latToY(mid.lat, this.canvasH);
-      this.ctx.save();
-      this.ctx.translate(x, y);
-      this.ctx.rotate(this.screenAngleOf(pts));
-      this.ctx.font = '10.5vp sans-serif';
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.lineWidth = 3.4;
-      this.ctx.strokeStyle = LABEL_HALO;
-      this.ctx.fillStyle = LABEL_TEXT;
-      this.ctx.strokeText(seg.name, 0, 0);
-      this.ctx.fillText(seg.name, 0, 0);
-      this.ctx.restore();
+      this.placeRoadLabel(job, alert);
     }
+  }
+
+  /** 沿路段试多个落点，找到第一个不与已有标签冲突的位置 */
+  private placeRoadLabel(job: LabelJob, alert: boolean): void {
+    const pts: LonLat[] = this.pointsOf(job.seg);
+    const angle: number = this.screenAngleOf(pts);
+    this.ctx.font = alert ? 'bold 11.5vp sans-serif' : '10.5vp sans-serif';
+    const textW: number = this.textWidthOf(job.name);
+    const cos: number = Math.abs(Math.cos(angle));
+    const sin: number = Math.abs(Math.sin(angle));
+    const halfW: number = (textW * cos + 14 * sin) / 2 + 2;
+    const halfH: number = (textW * sin + 14 * cos) / 2 + 2;
+    // 拥堵段优先落正中间（堵的就是这一段），畅通段错开路口
+    const ts: number[] = alert ? [0.5, 0.4, 0.6, 0.3, 0.7] : [0.38, 0.5, 0.62, 0.28, 0.72];
+    for (let k = 0; k < ts.length; k++) {
+      const p: LonLat = this.pointAt(pts, ts[k]);
+      const x: number = AreaConstants.lonToX(p.lon, this.canvasW);
+      const y: number = AreaConstants.latToY(p.lat, this.canvasH);
+      const box: Box = { left: x - halfW, top: y - halfH, right: x + halfW, bottom: y + halfH };
+      if (!this.isFree(box)) {
+        continue;
+      }
+      this.occupy(box);
+      this.drawRotatedLabel(job.name, x, y, angle, alert);
+      return;
+    }
+    // 拥堵路段所有落点都被占也要画：压一点字，总比"不知道哪条堵"强
+    if (alert) {
+      const p: LonLat = this.pointAt(pts, 0.5);
+      const x: number = AreaConstants.lonToX(p.lon, this.canvasW);
+      const y: number = AreaConstants.latToY(p.lat, this.canvasH);
+      this.occupy({ left: x - halfW, top: y - halfH, right: x + halfW, bottom: y + halfH });
+      this.drawRotatedLabel(job.name, x, y, angle, true);
+    }
+  }
+
+  private drawRotatedLabel(text: string, x: number, y: number, angle: number, alert: boolean): void {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.rotate(angle);
+    this.ctx.font = alert ? 'bold 11.5vp sans-serif' : '10.5vp sans-serif';
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.lineWidth = alert ? 4.2 : 3.4;
+    this.ctx.strokeStyle = LABEL_HALO;
+    this.ctx.fillStyle = alert ? LABEL_ALERT : LABEL_TEXT;
+    this.ctx.strokeText(text, 0, 0);
+    this.ctx.fillText(text, 0, 0);
+    this.ctx.restore();
   }
 
   /** 路口点：小而中性，可点击但不抢路况视觉 */
@@ -394,28 +454,101 @@ export struct TrafficMapPage {
       this.ctx.lineWidth = 1.3;
       this.ctx.strokeStyle = NODE_EDGE;
       this.ctx.stroke();
+      // 占住圆点位置，后画的标签不会压在点上
+      this.occupy({ left: x - 4.5, top: y - 4.5, right: x + 4.5, bottom: y + 4.5 });
     }
   }
 
-  /** 路口名：只标 3 个关键节点；钟楼在四路交汇中心，标签放上方避让路名 */
+  /**
+   * 路口名：主路口全部标名，拥堵路段的两端优先标
+   *
+   * 先标拥堵端点的原因：知道"从哪个路口堵到哪个路口"，才能判断堵的是哪一段，
+   * 只给路名的话，一条长路中间红一块仍然不知道起止位置。
+   */
   private drawNodeLabels(): void {
-    this.ctx.font = '9vp sans-serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.lineWidth = 3.2;
-    this.ctx.strokeStyle = LABEL_HALO;
-    this.ctx.fillStyle = NODE_TEXT;
-    for (let i = 0; i < NODE_LABELS.length; i++) {
-      const it: Intersection | undefined = this.find(NODE_LABELS[i]);
-      if (it === undefined) {
+    const targets: Intersection[] = [];
+    const added: Map<string, boolean> = new Map();
+
+    // 1) 拥堵路段两端
+    for (let i = 0; i < this.segments.length; i++) {
+      const seg: RoadSegment = this.segments[i];
+      if (!MapGeometry.isTrunk(seg.id) || this.levelOfSeg(seg) < 2) {
         continue;
       }
-      const center: boolean = NODE_LABELS[i] === 'INT_01';
-      const x: number = this.nodeX(it);
-      const y: number = this.nodeY(it) + (center ? -13 : 14);
+      const ends: string[] = [seg.fromId, seg.toId];
+      for (let e = 0; e < ends.length; e++) {
+        if (added.get(ends[e]) === true) {
+          continue;
+        }
+        const it: Intersection | undefined = this.find(ends[e]);
+        if (it !== undefined) {
+          added.set(ends[e], true);
+          targets.push(it);
+        }
+      }
+    }
+
+    // 2) 其余主干节点
+    for (let i = 0; i < MapGeometry.MAIN_NODES.length; i++) {
+      const id: string = MapGeometry.MAIN_NODES[i];
+      if (added.get(id) === true) {
+        continue;
+      }
+      const it: Intersection | undefined = this.find(id);
+      if (it !== undefined) {
+        added.set(id, true);
+        targets.push(it);
+      }
+    }
+
+    for (let i = 0; i < targets.length; i++) {
+      this.placeNodeLabel(targets[i]);
+    }
+  }
+
+  /** 节点名依次试下、上、右、左四个位置，避开已占用的标签 */
+  private placeNodeLabel(it: Intersection): void {
+    const alert: boolean = this.nodeIsCongested(it.id);
+    this.ctx.font = alert ? 'bold 9.5vp sans-serif' : '9vp sans-serif';
+    const halfW: number = this.textWidthOf(it.name) / 2 + 2;
+    const halfH: number = 7;
+    const cx: number = this.nodeX(it);
+    const cy: number = this.nodeY(it);
+    // 钟楼在四路交汇中心，上下都压路名，改放左上
+    const cands: number[][] = it.id === 'INT_01'
+      ? [[0, -13], [0, 13], [halfW + 10, 0], [-(halfW + 10), 0]]
+      : [[0, 13], [0, -13], [halfW + 10, 0], [-(halfW + 10), 0]];
+    for (let k = 0; k < cands.length; k++) {
+      const x: number = cx + cands[k][0];
+      const y: number = cy + cands[k][1];
+      const box: Box = { left: x - halfW - 2, top: y - halfH, right: x + halfW + 2, bottom: y + halfH };
+      if (!this.isFree(box)) {
+        continue;
+      }
+      this.occupy(box);
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.lineWidth = alert ? 4 : 3.2;
+      this.ctx.strokeStyle = LABEL_HALO;
+      this.ctx.fillStyle = alert ? LABEL_ALERT : NODE_TEXT;
       this.ctx.strokeText(it.name, x, y);
       this.ctx.fillText(it.name, x, y);
+      return;
     }
+  }
+
+  /** 该路口是否有拥堵路段接入 */
+  private nodeIsCongested(id: string): boolean {
+    for (let i = 0; i < this.segments.length; i++) {
+      const seg: RoadSegment = this.segments[i];
+      if (seg.fromId !== id && seg.toId !== id) {
+        continue;
+      }
+      if (this.levelOfSeg(seg) >= 2) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private isMainNode(id: string): boolean {
@@ -425,6 +558,34 @@ export struct TrafficMapPage {
       }
     }
     return false;
+  }
+
+  /** 路段拥堵档位：百度实测优先，未覆盖回落仿真 */
+  private levelOfSeg(seg: RoadSegment): number {
+    const idx: number = this.segments.indexOf(seg);
+    const c: number = idx >= 0 && idx < this.congestion.length ? this.congestion[idx] : 0;
+    return this.realLevels.get(seg.id) ?? TrafficUtil.roadLevelOf(c);
+  }
+
+  /** 文字宽度（vp）；measureText 异常时按字数估算，保证避让逻辑不失效 */
+  private textWidthOf(text: string): number {
+    const m: TextMetrics = this.ctx.measureText(text);
+    return m.width > 0 ? m.width : text.length * 10.5;
+  }
+
+  /** 该矩形是否与已占用区域冲突 */
+  private isFree(box: Box): boolean {
+    for (let i = 0; i < this.boxes.length; i++) {
+      const b: Box = this.boxes[i];
+      if (box.left < b.right && box.right > b.left && box.top < b.bottom && box.bottom > b.top) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private occupy(box: Box): void {
+    this.boxes.push(box);
   }
 
   /** 折线在屏幕上的总长（vp），用于判断是否值得标注 */
@@ -709,7 +870,7 @@ export struct TrafficMapPage {
 
       // 图例
       Row() {
-        Text('道路路况')
+        Text('路况 · 堵段标红加粗')
           .fontSize(11)
           .fontColor(ThemeConstants.TEXT_SUB)
         this.legendItem('畅通', ThemeConstants.LEVEL_CLEAR)
