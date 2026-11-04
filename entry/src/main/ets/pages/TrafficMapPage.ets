@@ -34,8 +34,11 @@ const NODE_FILL: string = '#FFFFFF';
 const NODE_EDGE: string = '#8E8A83';
 /** 路名标注的最短屏幕长度（vp）：太短的路段不标，避免文字压过道路 */
 const MIN_LABEL_LEN: number = 32;
-/** 显示名称的路口：只保留 3 个关键节点，中心区不叠字 */
-const NODE_LABELS: string[] = ['INT_04', 'INT_12', 'INT_15'];
+/**
+ * 显示名称的路口：只保留 3 个关键节点，中心区不叠字
+ * 编号对应 XianWallMock：INT_01 钟楼 / INT_10 五路口 / INT_09 大差市
+ */
+const NODE_LABELS: string[] = ['INT_01', 'INT_10', 'INT_09'];
 
 /**
  * 片区路况图：仿真实地图绘制（城墙、绿地、道路走向、路况色带）+ 绝对定位节点
@@ -405,7 +408,7 @@ export struct TrafficMapPage {
       if (it === undefined) {
         continue;
       }
-      const center: boolean = NODE_LABELS[i] === 'INT_04';
+      const center: boolean = NODE_LABELS[i] === 'INT_01';
       const x: number = this.nodeX(it);
       const y: number = this.nodeY(it) + (center ? -13 : 14);
       this.ctx.strokeText(it.name, x, y);
