@@ -28,6 +28,7 @@ export struct IntersectionDetailPage {
   @Local canvasW: number = 0;
   @Local canvasH: number = 0;
   @Local isFav: boolean = false;
+  @Local refreshing: boolean = false;
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
@@ -35,9 +36,14 @@ export struct IntersectionDetailPage {
   private shift: number = 0;
   private tickId: number = -1;
   private frameId: number = -1;
+  private dataId: number = -1;
 
   aboutToAppear(): void {
     this.loadData();
+    // 半分钟刷新一次路口的流量与配时，避免页面停留时数据停滞
+    this.dataId = setInterval(() => {
+      this.refreshData();
+    }, AppConstants.REFRESH_DATA_MS);
   }
 
   aboutToDisappear(): void {
@@ -49,9 +55,24 @@ export struct IntersectionDetailPage {
       clearInterval(this.frameId);
       this.frameId = -1;
     }
+    if (this.dataId !== -1) {
+      clearInterval(this.dataId);
+      this.dataId = -1;
+    }
   }
 
   async loadData(): Promise<void> {
+    await this.refreshData();
+    // 进入页面时让首个相位只剩 6 秒，便于快速观察相位切换
+    this.phaseIndex = 0;
+    const first: SignalPhase | undefined = this.phases.length > 0 ? this.phases[0] : undefined;
+    this.remain = first !== undefined ? Math.min(first.green, 6) : 0;
+    this.updateWait();
+    this.startTimers();
+  }
+
+  /** 只刷新数据，不打断正在跑的相位动画（定时刷新与手动刷新都走这里） */
+  async refreshData(): Promise<void> {
     const repo = RepositoryFactory.getTrafficRepository();
     const it: Intersection | undefined = await repo.getIntersections()
       .then((list: Intersection[]) => list.find((x: Intersection) => x.id === this.intersectionId));
@@ -76,12 +97,15 @@ export struct IntersectionDetailPage {
 
     this.isFav = await FavoriteUtil.contains(this.intersectionId);
 
-    // 进入页面时让首个相位只剩 6 秒，便于快速观察相位切换
-    this.phaseIndex = 0;
-    const first: SignalPhase | undefined = this.phases.length > 0 ? this.phases[0] : undefined;
-    this.remain = first !== undefined ? Math.min(first.green, 6) : 0;
+    // 相位数量或绿灯时长变化后，把游标与倒计时夹回合法范围
+    if (this.phaseIndex >= this.phases.length) {
+      this.phaseIndex = 0;
+    }
+    const cur: SignalPhase | undefined = this.currentPhase();
+    if (cur !== undefined && this.remain > cur.green) {
+      this.remain = cur.green;
+    }
     this.updateWait();
-    this.startTimers();
   }
 
   private startTimers(): void {
@@ -337,9 +361,23 @@ export struct IntersectionDetailPage {
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
 
-          Text('饱和度 ' + this.saturation.toFixed(2))
-            .fontSize(12)
-            .fontColor(TrafficUtil.colorOfSaturation(this.saturation))
+          Row({ space: 12 }) {
+            Text('饱和度 ' + this.saturation.toFixed(2))
+              .fontSize(12)
+              .fontColor(TrafficUtil.colorOfSaturation(this.saturation))
+            Text(this.refreshing ? '刷新中' : '刷新')
+              .fontSize(13)
+              .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
+              .onClick(() => {
+                if (this.refreshing) {
+                  return;
+                }
+                this.refreshing = true;
+                this.refreshData().then(() => {
+                  this.refreshing = false;
+                });
+              })
+          }
         }
         .width('100%')
         .padding({ left: 12, right: 16, top: 8, bottom: 8 })

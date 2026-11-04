@@ -1,4 +1,5 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
+import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { TrafficUtil } from '../common/utils/TrafficUtil';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
@@ -33,11 +34,24 @@ export struct SignalPlanPage {
   @Local optimized: boolean = false;
   @Local rows: EvalRow[] = [];
   @Local scenarioIndex: number = 0;
+  @Local refreshing: boolean = false;
 
   private scenarios: string[] = ['早高峰', '平峰', '晚高峰'];
+  private timerId: number = -1;
 
   aboutToAppear(): void {
     this.loadData();
+    // 半分钟刷新：配时随实测流量重算，页面停留时也要跟上
+    this.timerId = setInterval(() => {
+      this.loadData();
+    }, AppConstants.REFRESH_DATA_MS);
+  }
+
+  aboutToDisappear(): void {
+    if (this.timerId !== -1) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
+    }
   }
 
   async loadData(): Promise<void> {
@@ -140,6 +154,19 @@ export struct SignalPlanPage {
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
+
+          Text(this.refreshing ? '刷新中' : '刷新')
+            .fontSize(13)
+            .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
+            .onClick(() => {
+              if (this.refreshing) {
+                return;
+              }
+              this.refreshing = true;
+              this.loadData().then(() => {
+                this.refreshing = false;
+              });
+            })
         }
         .width('100%')
         .padding({ left: 12, right: 16, top: 8, bottom: 8 })

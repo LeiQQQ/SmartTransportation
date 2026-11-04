@@ -1,4 +1,5 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
+import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { FavoriteUtil } from '../common/utils/FavoriteUtil';
 import { EmptyView } from '../components/EmptyView';
@@ -14,9 +15,23 @@ import { TrafficUtil } from '../common/utils/TrafficUtil';
 export struct FavoritePage {
   @Local list: Intersection[] = [];
   @Local saturations: number[] = [];
+  @Local refreshing: boolean = false;
+
+  private timerId: number = -1;
 
   aboutToAppear(): void {
     this.loadData();
+    // 半分钟刷新饱和度，收藏列表本身来自本地存储
+    this.timerId = setInterval(() => {
+      this.loadData();
+    }, AppConstants.REFRESH_DATA_MS);
+  }
+
+  aboutToDisappear(): void {
+    if (this.timerId !== -1) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
+    }
   }
 
   async loadData(): Promise<void> {
@@ -61,6 +76,19 @@ export struct FavoritePage {
             .fontWeight(FontWeight.Bold)
             .fontColor(ThemeConstants.TEXT_MAIN)
             .layoutWeight(1)
+          Text(this.refreshing ? '刷新中' : '刷新')
+            .fontSize(13)
+            .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
+            .margin({ right: 12 })
+            .onClick(() => {
+              if (this.refreshing) {
+                return;
+              }
+              this.refreshing = true;
+              this.loadData().then(() => {
+                this.refreshing = false;
+              });
+            })
           Text(this.list.length + ' 个')
             .fontSize(12)
             .fontColor(ThemeConstants.TEXT_SUB)

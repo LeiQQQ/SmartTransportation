@@ -1,4 +1,5 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
+import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
 import { EventTypeUtil, TrafficEvent } from '../model/TrafficEvent';
@@ -11,6 +12,7 @@ export struct EventPage {
   @Local events: TrafficEvent[] = [];
   @Local filtered: TrafficEvent[] = [];
   @Local filterIndex: number = 0;
+  @Local refreshing: boolean = false;
 
   private filters: number[] = [-1, 0, 3, 1, 2];
 
@@ -18,10 +20,10 @@ export struct EventPage {
 
   aboutToAppear(): void {
     this.loadData();
-    // 事件是跨设备共享数据：定时拉取，其他设备上报的事件可自动出现（10 s）
+    // 事件跨设备共享：半分钟轮询，其他设备上报的事件会自动出现
     this.timerId = setInterval(() => {
       this.loadData();
-    }, 10000);
+    }, AppConstants.REFRESH_DATA_MS);
   }
 
   aboutToDisappear(): void {
@@ -85,6 +87,20 @@ export struct EventPage {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
+
+        Text(this.refreshing ? '刷新中' : '刷新')
+          .fontSize(13)
+          .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
+          .margin({ right: 14 })
+          .onClick(() => {
+            if (this.refreshing) {
+              return;
+            }
+            this.refreshing = true;
+            this.loadData().then(() => {
+              this.refreshing = false;
+            });
+          })
 
         Text('+ 上报')
           .fontSize(13)

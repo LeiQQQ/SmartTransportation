@@ -37,9 +37,15 @@ export class AppConstants {
    */
   static readonly MAP_MODE: string = 'TOPOLOGY';
 
-  /** 刷新间隔（毫秒） */
+  /**
+   * 自动刷新间隔（毫秒）：全站统一半分钟
+   * 后端百度快照 45 s 刷新一次，端侧 30 s 拉取可保证延迟不超过一个周期
+   */
+  static readonly REFRESH_DATA_MS: number = 30000;
+  /** 首页片区指标 */
   static readonly REFRESH_INDEX_MS: number = 30000;
-  static readonly REFRESH_FLOW_MS: number = 5000;
+  /** 流量 / 路况 / 事件 / 配时统一按半分钟 */
+  static readonly REFRESH_FLOW_MS: number = 30000;
   static readonly ANIMATION_FRAME_MS: number = 200;
 
   /** 路口动画中每个相位的模拟秒数（加速演示） */

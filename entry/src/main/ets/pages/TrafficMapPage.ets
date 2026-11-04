@@ -69,16 +69,18 @@ export struct TrafficMapPage {
   private congestion: number[] = [];
   /** 百度实测路况：segId → 三档 level；空 Map = 用仿真 */
   @Local realLevels: Map<string, number> = new Map();
+  /** 手动刷新中：按钮显示"刷新中"并禁止重复点击 */
+  @Local refreshing: boolean = false;
 
   aboutToAppear(): void {
     this.loadAll();
+    // 流量与路况统一半分钟拉一次（后端快照 45 s 更新）
     this.timerId = setInterval(() => {
       this.loadFlows();
     }, AppConstants.REFRESH_FLOW_MS);
-    // 真实路况：后端有 60s 缓存，端侧 60s 拉一次即可
     this.realTimerId = setInterval(() => {
       this.loadRealtime();
-    }, 60_000);
+    }, AppConstants.REFRESH_DATA_MS);
   }
 
   aboutToDisappear(): void {
@@ -616,6 +618,20 @@ export struct TrafficMapPage {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
+
+        Text(this.refreshing ? '刷新中' : '刷新')
+          .fontSize(13)
+          .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
+          .margin({ right: 16 })
+          .onClick(() => {
+            if (this.refreshing) {
+              return;
+            }
+            this.refreshing = true;
+            this.loadAll().then(() => {
+              this.refreshing = false;
+            });
+          })
 
         Text('复位')
           .fontSize(13)
