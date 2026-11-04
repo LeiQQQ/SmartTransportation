@@ -28,25 +28,14 @@ export class AppConstants {
   /** 是否启用远程数据源（由 DATA_SOURCE_MODE 派生，保留以兼容既有调用） */
   static readonly USE_REMOTE: boolean = AppConstants.DATA_SOURCE_MODE !== 'MOCK';
 
-  /** 地图渲染模式：'TOPOLOGY' 拓扑图（默认，零依赖） | 'MAP_KIT' 花瓣地图 */
+  /**
+   * 地图渲染模式：'TOPOLOGY' Canvas 自绘仿真实地图（默认，零地图 SDK 依赖）
+   *
+   * 曾评估百度地图鸿蒙 SDK（@bdmap/map）真底图方案，因该 SDK 仅提供 arm64-v8a
+   * 原生库，x86_64 模拟器安装即报 ABI 不匹配，已回退。设备为 arm64 真机且具备
+   * 鸿蒙 SDK 类型 AK 时，可从 git 历史（提交 96f6804 / 0c5af67）取回双引擎实现。
+   */
   static readonly MAP_MODE: string = 'TOPOLOGY';
-
-  /**
-   * 百度地图鸿蒙 SDK AK（应用类型：鸿蒙 SDK，AK 与 AGC 的 AppID 绑定）
-   * 为空 = 不初始化 SDK，路况图自动回落 Canvas 自绘（演示不依赖百度底图）
-   */
-  static readonly BAIDU_MAP_AK: string = '8r5KGVxO7h7SkH6UnZ19fTwVtslCYrzE';
-
-  /**
-   * 路况图渲染引擎：'AUTO' 有百度 AK 用 SDK 底图（道路与百度一致），否则 Canvas 自绘
-   * 'CANVAS' 强制自绘；'BAIDU' 强制 SDK（AK 为空时仍回落）
-   */
-  static readonly MAP_ENGINE: string = 'AUTO';
-
-  /** 片区初始视野：钟楼附近中心点与缩放级别（bd09 坐标由 SDK 内部处理基准差异） */
-  static readonly MAP_CENTER_LON: number = 108.9495;
-  static readonly MAP_CENTER_LAT: number = 34.2615;
-  static readonly MAP_ZOOM: number = 14.5;
 
   /** 刷新间隔（毫秒） */
   static readonly REFRESH_INDEX_MS: number = 30000;

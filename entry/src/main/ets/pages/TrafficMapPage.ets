@@ -8,7 +8,6 @@ import { Intersection, RoadSegment } from '../model/Intersection';
 import { FlowRecord } from '../model/FlowRecord';
 import { RealtimeRoad } from '../model/RealtimeRoad';
 import { LonLat, MapGeometry } from '../common/constants/MapGeometry';
-import { BaiduMapView } from '../components/BaiduMapView';
 
 /** 地图配色：仅本页绘制使用，模拟导航地图的观感 */
 const MAP_BG: string = '#F4F1EA';
@@ -55,11 +54,8 @@ export struct TrafficMapPage {
   private congestion: number[] = [];
   /** 百度实测路况：segId → 三档 level；空 Map = 用仿真 */
   @Local realLevels: Map<string, number> = new Map();
-  /** 路况图引擎：SDK 初始化成功才用百度底图，否则 Canvas 自绘（避免白屏） */
-  @Local useBaidu: boolean = false;
 
   aboutToAppear(): void {
-    this.resolveEngine();
     this.loadAll();
     this.timerId = setInterval(() => {
       this.loadFlows();
@@ -68,37 +64,6 @@ export struct TrafficMapPage {
     this.realTimerId = setInterval(() => {
       this.loadRealtime();
     }, 60_000);
-  }
-
-  /** 选择渲染引擎：SDK 初始化失败 / 未配置 AK 一律回落 Canvas 自绘 */
-  private resolveEngine(): void {
-    if (AppConstants.MAP_ENGINE === 'CANVAS' || AppConstants.BAIDU_MAP_AK.length === 0) {
-      this.useBaidu = false;
-      return;
-    }
-    if (AppConstants.MAP_ENGINE === 'BAIDU') {
-      this.useBaidu = true;
-      return;
-    }
-    const ready: boolean | undefined = AppStorage.get<boolean>('baiduMapReady');
-    if (ready === true) {
-      this.useBaidu = true;
-      return;
-    }
-    if (ready === undefined) {
-      // SDK 初始化是异步的，1.2s 后再判断一次（期间先显示 Canvas，避免空白）
-      setTimeout(() => {
-        if (AppStorage.get<boolean>('baiduMapReady') === true && !this.useBaidu) {
-          this.useBaidu = true;
-        }
-      }, 1200);
-    }
-  }
-
-  /** 百度底图挂载失败（鉴权错/无网络/加载超时）：回落 Canvas，演示不中断 */
-  private onBaiduFail(): void {
-    this.useBaidu = false;
-    this.draw();
   }
 
   aboutToDisappear(): void {
@@ -577,82 +542,66 @@ export struct TrafficMapPage {
       .width('100%')
       .padding({ left: 16, right: 16, top: 12, bottom: 8 })
 
-      if (this.useBaidu) {
-        // 百度 SDK 底图：道路形状与百度地图一致，官方路况图层 + 三档色带叠加
-        Stack({ alignContent: Alignment.TopStart }) {
-          BaiduMapView({
-            segments: this.segments,
-            intersections: this.intersections,
-            levels: this.realLevels,
-            onFail: () => {
-              this.onBaiduFail();
-            }
+      // Canvas 自绘仿真实地图（零地图 SDK 依赖）
+      Stack({ alignContent: Alignment.TopStart }) {
+        Canvas(this.ctx)
+          .width('100%')
+          .height('100%')
+          .onReady(() => {
+            this.ready = true;
+            this.draw();
           })
-        }
-        .width('100%')
-        .layoutWeight(1)
-      } else {
-        // Canvas 自绘引擎（零 SDK 依赖）：AK 未配置 / SDK 初始化失败时的降级路径
-        Stack({ alignContent: Alignment.TopStart }) {
-          Canvas(this.ctx)
-            .width('100%')
-            .height('100%')
-            .onReady(() => {
-              this.ready = true;
-              this.draw();
-            })
 
-          // 路口节点（绝对定位，便于点击）
-          ForEach(this.intersections, (item: Intersection) => {
-            Stack() {
-              Circle()
-                .width(this.nodeSize(item.id))
-                .height(this.nodeSize(item.id))
-                .fill(ThemeConstants.BG_CARD)
-                .stroke(NODE_EDGE)
-                .strokeWidth(1.6)
-            }
-            .width(24)
-            .height(24)
-            .position({
-              x: this.nodeX(item) - 12,
-              y: this.nodeY(item) - 12
-            })
-            .onClick(() => {
-              NavRouter.toIntersection(item.id);
-            })
-          }, (item: Intersection) => item.id)
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .scale({ x: this.scaleValue, y: this.scaleValue })
-        .translate({ x: this.offsetX, y: this.offsetY })
-        .gesture(
-          GestureGroup(GestureMode.Parallel,
-            PinchGesture({ fingers: 2 })
-              .onActionStart(() => {
-                this.baseScale = this.scaleValue;
-              })
-              .onActionUpdate((event: GestureEvent) => {
-                this.scaleValue = Math.max(0.8, Math.min(3, this.baseScale * event.scale));
-              }),
-            PanGesture({ fingers: 1 })
-              .onActionStart(() => {
-                this.baseX = this.offsetX;
-                this.baseY = this.offsetY;
-              })
-              .onActionUpdate((event: GestureEvent) => {
-                this.offsetX = this.baseX + event.offsetX;
-                this.offsetY = this.baseY + event.offsetY;
-              })
-          )
-        )
-        .onAreaChange((oldArea: Area, newArea: Area) => {
-          this.canvasW = newArea.width as number;
-          this.canvasH = newArea.height as number;
-          this.draw();
-        })
+        // 路口节点（绝对定位，便于点击）
+        ForEach(this.intersections, (item: Intersection) => {
+          Stack() {
+            Circle()
+              .width(this.nodeSize(item.id))
+              .height(this.nodeSize(item.id))
+              .fill(ThemeConstants.BG_CARD)
+              .stroke(NODE_EDGE)
+              .strokeWidth(1.6)
+          }
+          .width(24)
+          .height(24)
+          .position({
+            x: this.nodeX(item) - 12,
+            y: this.nodeY(item) - 12
+          })
+          .onClick(() => {
+            NavRouter.toIntersection(item.id);
+          })
+        }, (item: Intersection) => item.id)
       }
+      .width('100%')
+      .layoutWeight(1)
+      .scale({ x: this.scaleValue, y: this.scaleValue })
+      .translate({ x: this.offsetX, y: this.offsetY })
+      .gesture(
+        GestureGroup(GestureMode.Parallel,
+          PinchGesture({ fingers: 2 })
+            .onActionStart(() => {
+              this.baseScale = this.scaleValue;
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.scaleValue = Math.max(0.8, Math.min(3, this.baseScale * event.scale));
+            }),
+          PanGesture({ fingers: 1 })
+            .onActionStart(() => {
+              this.baseX = this.offsetX;
+              this.baseY = this.offsetY;
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              this.offsetX = this.baseX + event.offsetX;
+              this.offsetY = this.baseY + event.offsetY;
+            })
+        )
+      )
+      .onAreaChange((oldArea: Area, newArea: Area) => {
+        this.canvasW = newArea.width as number;
+        this.canvasH = newArea.height as number;
+        this.draw();
+      })
 
       // 图例
       Row() {
