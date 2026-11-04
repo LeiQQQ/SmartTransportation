@@ -2,6 +2,7 @@ import { SimulationDataSource } from './source/SimulationDataSource.js';
 import { TrafficService } from './service/TrafficService.js';
 import { SignalService } from './service/SignalService.js';
 import { EventService } from './service/EventService.js';
+import { BaiduTrafficService } from './service/BaiduTrafficService.js';
 
 /**
  * 依赖装配（简易容器）
@@ -12,3 +13,4 @@ export const dataSource = new SimulationDataSource();
 export const trafficService = new TrafficService(dataSource);
 export const signalService = new SignalService(dataSource);
 export const eventService = new EventService();
+export const baiduTrafficService = new BaiduTrafficService();

@@ -6,6 +6,7 @@ import areaRoutes from './routes/area.js';
 import trafficRoutes from './routes/traffic.js';
 import signalRoutes from './routes/signal.js';
 import eventRoutes from './routes/event.js';
+import roadRoutes from './routes/road.js';
 
 /**
  * 基于HarmonyOS车流自适应信号灯系统设计与开发 · 后端服务入口
@@ -40,6 +41,7 @@ await app.register(areaRoutes, { prefix: `${SERVER.API_PREFIX}/area` });
 await app.register(trafficRoutes, { prefix: `${SERVER.API_PREFIX}/traffic` });
 await app.register(signalRoutes, { prefix: `${SERVER.API_PREFIX}/signal` });
 await app.register(eventRoutes, { prefix: SERVER.API_PREFIX });
+await app.register(roadRoutes, { prefix: `${SERVER.API_PREFIX}/road` });
 
 try {
   await app.listen({ port: SERVER.PORT, host: SERVER.HOST });

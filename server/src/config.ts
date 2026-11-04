@@ -7,6 +7,9 @@
  *   任一侧修改参数，另一侧必须同步，否则前后端算出的周期会不一致。
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 /** 研究区域 */
 export const AREA = {
   NAME: '西安城墙内',
@@ -65,4 +68,39 @@ export const SERVER = {
   HOST: process.env.HOST ?? '0.0.0.0',
   /** 接口前缀 */
   API_PREFIX: '/api/v1'
+} as const;
+
+/**
+ * 读取 server/.env（零依赖，仅本地开发用；生产环境用系统环境变量）
+ * 只填充 process.env 中尚不存在的键，系统环境变量优先。
+ */
+function loadLocalEnv(): void {
+  try {
+    const content: string = readFileSync(join(process.cwd(), '.env'), 'utf-8');
+    for (const line of content.split(/\r?\n/)) {
+      const m: RegExpMatchArray | null = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
+      if (m !== null && process.env[m[1]] === undefined) {
+        process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+      }
+    }
+  } catch {
+    // 无 .env 文件时忽略
+  }
+}
+loadLocalEnv();
+
+/** 百度地图实时路况（/traffic/v1/road，按道路名 + 城市查询） */
+export const BAIDU = {
+  BASE: 'https://api.map.baidu.com',
+  /** AK 从 server/.env 读取（BAIDU_AK=xxx），.env 不进 Git */
+  AK: process.env.BAIDU_AK ?? '',
+  /** 查询城市（可用城市名或 adcode 610113 等，城墙内统一用市名） */
+  CITY: '西安',
+  /** 路况缓存毫秒：全量 20 条道路一次，1 分钟内直接复用，避免打爆配额 */
+  CACHE_MS: 60_000,
+  /** 单请求超时 */
+  TIMEOUT_MS: 5_000,
+  /** 并发分批大小与批间隔，规避 QPS 限制 */
+  BATCH_SIZE: 5,
+  BATCH_GAP_MS: 300
 } as const;
