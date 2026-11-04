@@ -1,5 +1,5 @@
 import { BAIDU } from '../config.js';
-import { SEG_TO_BAIDU_ROAD, BAIDU_ROADS } from '../data/baiduRoads.js';
+import { SEG_TO_BAIDU_ROADS } from '../data/baiduRoads.js';
 import { SEGMENTS } from '../data/network.js';
 import type { RoadSegment } from '../types/intersection.js';
 
@@ -70,19 +70,42 @@ function toLevel(baiduStatus: number): number {
 /** 缓存：60 s 内全量复用，控制配额消耗 */
 let cache: { ts: number; snapshot: RealtimeSnapshot } | null = null;
 
-/** 单条道路查询（5 s 超时，失败返回 null） */
-async function fetchRoad(roadName: string): Promise<BaiduRoadResponse | null> {
-  const url: string = `${BAIDU.BASE}/traffic/v1/road?road_name=${encodeURIComponent(roadName)}`
-    + `&city=${encodeURIComponent(BAIDU.CITY)}&ak=${BAIDU.AK}`;
-  try {
-    const response: Response = await fetch(url, { signal: AbortSignal.timeout(BAIDU.TIMEOUT_MS) });
-    if (!response.ok) {
-      return null;
+/** 限流等待重试参数 */
+const RATE_LIMIT_RETRY_MS: number = 2000;
+const RATE_LIMIT_RETRY_MAX: number = 2;
+const SERIAL_GAP_MS: number = 250;
+
+function isRateLimited(resp: BaiduRoadResponse | null): boolean {
+  return resp !== null && resp.status !== 0 && (resp.message ?? '').includes('并发');
+}
+
+/** 单条道路查询（按候选名顺序尝试；限流时等待重试；失败返回 null） */
+async function fetchRoad(candidates: readonly string[]): Promise<BaiduRoadResponse | null> {
+  for (const roadName of candidates) {
+    const url: string = `${BAIDU.BASE}/traffic/v1/road?road_name=${encodeURIComponent(roadName)}`
+      + `&city=${encodeURIComponent(BAIDU.CITY)}&ak=${BAIDU.AK}`;
+    for (let retry = 0; retry <= RATE_LIMIT_RETRY_MAX; retry++) {
+      try {
+        const response: Response = await fetch(url, { signal: AbortSignal.timeout(BAIDU.TIMEOUT_MS) });
+        if (!response.ok) {
+          break;
+        }
+        const json = (await response.json()) as BaiduRoadResponse;
+        if (json.status === 0) {
+          return json;
+        }
+        if (!isRateLimited(json)) {
+          break; // road_name 错误等，换下一个候选名
+        }
+        // 限流：等待后重试
+        await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
+      } catch {
+        break; // 网络/超时，换下一个候选名
+      }
     }
-    return (await response.json()) as BaiduRoadResponse;
-  } catch {
-    return null;
+    await new Promise((resolve) => setTimeout(resolve, SERIAL_GAP_MS));
   }
+  return null;
 }
 
 /** 道路响应 → 该道路的level/status/speed 聚合（取最差区段） */
@@ -130,30 +153,28 @@ export class BaiduTrafficService {
       return cache.snapshot;
     }
 
-    // 分批并发，规避 QPS 限制
+    // 串行查询（个人 AK 的 QPS 配额低，2026-11-04 实测并发会触发限流）
     const failed: string[] = [];
     const roadInfo: Map<string, Omit<RealtimeRoad, 'segId' | 'segName'>> = new Map();
-    for (let i = 0; i < BAIDU_ROADS.length; i += BAIDU.BATCH_SIZE) {
-      const batch: readonly string[] = BAIDU_ROADS.slice(i, i + BAIDU.BATCH_SIZE);
-      const results = await Promise.allSettled(batch.map((name: string) => fetchRoad(name)));
-      results.forEach((r, j) => {
-        const name: string = batch[j];
-        const resp: BaiduRoadResponse | null = r.status === 'fulfilled' ? r.value : null;
-        if (resp === null || resp.status !== 0) {
-          failed.push(`${name}(${resp?.message ?? '网络/超时失败'})`);
-          return;
-        }
-        roadInfo.set(name, summarizeRoad(resp, name));
-      });
-      if (i + BAIDU.BATCH_SIZE < BAIDU_ROADS.length) {
-        await new Promise((resolve) => setTimeout(resolve, BAIDU.BATCH_GAP_MS));
+    const seen: Set<string> = new Set();
+    for (const names of Object.values(SEG_TO_BAIDU_ROADS)) {
+      const key: string = names[0];
+      if (seen.has(key)) {
+        continue;
       }
+      seen.add(key);
+      const resp: BaiduRoadResponse | null = await fetchRoad(names);
+      if (resp === null) {
+        failed.push(`${key}(未命中或失败)`);
+        continue;
+      }
+      roadInfo.set(key, summarizeRoad(resp, key));
     }
 
     // 道路级 → 路段级
     const roads: RealtimeRoad[] = [];
     for (const seg of SEGMENTS) {
-      const baiduName: string | undefined = SEG_TO_BAIDU_ROAD[seg.id];
+      const baiduName: string | undefined = SEG_TO_BAIDU_ROADS[seg.id]?.[0];
       if (baiduName === undefined) {
         continue;
       }

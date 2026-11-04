@@ -99,8 +99,5 @@ export const BAIDU = {
   /** 路况缓存毫秒：全量 20 条道路一次，1 分钟内直接复用，避免打爆配额 */
   CACHE_MS: 60_000,
   /** 单请求超时 */
-  TIMEOUT_MS: 5_000,
-  /** 并发分批大小与批间隔，规避 QPS 限制 */
-  BATCH_SIZE: 5,
-  BATCH_GAP_MS: 300
+  TIMEOUT_MS: 5_000
 } as const;
