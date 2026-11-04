@@ -11,6 +11,13 @@ export interface ApproachFlow {
   delay: number;
   /** 饱和度 v/c */
   saturation: number;
+  /**
+   * 数据来源：BAIDU 由实测反推，SIM 为确定性仿真
+   * 端侧据此标注可信度，避免把仿真数字当成实测（两者会明显不同）
+   */
+  source?: 'BAIDU' | 'SIM';
+  /** 实测明细，如「东向西 · 590m · 加重 · 6km/h」；仿真时无此字段 */
+  note?: string;
 }
 
 /** 单路口流量记录 */

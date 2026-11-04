@@ -11,6 +11,10 @@ export interface ApproachFlow {
   delay: number;
   /** 饱和度 v/c */
   saturation: number;
+  /** 数据来源：BAIDU 实测反推 / SIM 仿真（后端不下发时视为 SIM） */
+  source?: string;
+  /** 实测明细，如「东向西 · 590m · 加重 · 6km/h」 */
+  note?: string;
 }
 
 /** 单路口实时流量记录 */

@@ -10,7 +10,7 @@ import {
 import type { BaiduTrafficService } from '../service/BaiduTrafficService.js';
 import type {
   ApproachDir, ApproachFlow, AreaTrafficIndex, FlowRecord, Intersection, RealtimeRoad,
-  RealtimeSnapshot, RoadSegment
+  RealtimeSection, RealtimeSnapshot, RoadSegment
 } from '../types/index.js';
 
 /**
@@ -40,6 +40,8 @@ interface MeasuredSegment {
   queue: number;
   /** 实测方向对应的进口道；null 表示双向都适用 */
   approach: ApproachDir | null;
+  /** 实测明细文案，端侧用于标注「这个数字从哪来」 */
+  note: string;
 }
 
 /** 畅通区间的饱和度上下限（实测判定畅通时的约束范围） */
@@ -125,7 +127,7 @@ export class HybridDataSource implements IDataSource {
       const approach = intersection.approaches[i];
       const measured: MeasuredSegment | null = this.measuredOf(intersection, approach.dir, bySeg);
       if (measured === null) {
-        flows.push(base.flows[i]);
+        flows.push({ ...base.flows[i], source: 'SIM' });
         continue;
       }
       const capacity: number = capacityOf(approach.saturationFlow, approach.lanes, TRAFFIC.DISPLAY_GREEN_RATIO);
@@ -138,7 +140,9 @@ export class HybridDataSource implements IDataSource {
           volume: Math.round(x * capacity),
           queueLength: Math.min(baseFlow.queueLength, CLEAR_QUEUE_MAX),
           delay: Math.round(x * TRAFFIC.DELAY_COEFF + TRAFFIC.DELAY_BASE),
-          saturation: Number(x.toFixed(2))
+          saturation: Number(x.toFixed(2)),
+          source: 'BAIDU',
+          note: measured.note
         });
         continue;
       }
@@ -148,7 +152,9 @@ export class HybridDataSource implements IDataSource {
         volume: Math.round(measured.saturation * capacity),
         queueLength: measured.queue,
         delay: Math.round(measured.saturation * TRAFFIC.DELAY_COEFF + TRAFFIC.DELAY_BASE),
-        saturation: Number(measured.saturation.toFixed(2))
+        saturation: Number(measured.saturation.toFixed(2)),
+        source: 'BAIDU',
+        note: measured.note
       });
     }
     return { intersectionId: intersection.id, timestamp: Date.now(), flows: flows };
@@ -216,7 +222,7 @@ export class HybridDataSource implements IDataSource {
   private reverseOf(road: RealtimeRoad, seg: RoadSegment): MeasuredSegment | null {
     if (road.sections.length === 0) {
       // 百度仅在存在拥堵区段时返回该数组：空 = 整段畅通
-      return { saturation: FREE_SATURATION, clear: true, queue: 0, approach: null };
+      return { saturation: FREE_SATURATION, clear: true, queue: 0, approach: null, note: '实测畅通' };
     }
 
     // 长道路被切成多段播报时，用方位词（东段/西段…）把拥堵落到具体路段
@@ -237,8 +243,28 @@ export class HybridDataSource implements IDataSource {
       saturation: Number(saturation.toFixed(2)),
       clear: false,
       queue: queueFromDistance(target.congestionDistance * weight),
-      approach: target.approach
+      approach: target.approach,
+      note: this.sectionNote(target)
     };
+  }
+
+  /** 实测细节文案：方向 · 拥堵长度 · 趋势 · 车速 */
+  private sectionNote(section: RealtimeSection): string {
+    const parts: string[] = [];
+    const head: string = section.desc.split(',')[0].trim();
+    if (head.length > 0) {
+      parts.push(head);
+    }
+    if (section.congestionDistance > 0) {
+      parts.push(section.congestionDistance + 'm');
+    }
+    if (section.trend.length > 0) {
+      parts.push(section.trend);
+    }
+    if (section.speed > 0) {
+      parts.push(section.speed.toFixed(0) + 'km/h');
+    }
+    return parts.length > 0 ? parts.join(' · ') : '实测拥堵';
   }
 
   /** 路段长度（米）：两端路口直线距离，用于拥堵占比与车速加权 */

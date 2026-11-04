@@ -474,6 +474,12 @@ export struct IntersectionDetailPage {
             .color(ThemeConstants.DIVIDER)
             .margin({ top: 12, bottom: 10 })
 
+          Text(this.sourceLine())
+            .fontSize(11)
+            .fontColor(this.isMeasured(this.focusDir()) ? ThemeConstants.LEVEL_SEVERE : ThemeConstants.TEXT_SUB)
+            .width('100%')
+            .margin({ bottom: 6 })
+
           Text(this.diagnosisText())
             .fontSize(12)
             .fontColor(ThemeConstants.TEXT_SUB)
@@ -534,6 +540,40 @@ export struct IntersectionDetailPage {
   private phaseNameText(): string {
     const p: SignalPhase | undefined = this.currentPhase();
     return p === undefined ? '--' : p.name;
+  }
+
+  /** 该进口道的实测明细（仿真时为空串） */
+  private noteOf(dir: string): string {
+    for (let i = 0; i < this.flows.length; i++) {
+      if (this.flows[i].dir.toString() === dir) {
+        return this.flows[i].note ?? '';
+      }
+    }
+    return '';
+  }
+
+  /** 该进口道是否由百度实测反推 */
+  private isMeasured(dir: string): boolean {
+    for (let i = 0; i < this.flows.length; i++) {
+      if (this.flows[i].dir.toString() === dir) {
+        return this.flows[i].source === 'BAIDU';
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 数据来源说明：区分实测与仿真
+   *
+   * 这行文字很关键——两端同时打开时，一端是实测、一端是仿真很容易被误认为"数据错了"，
+   * 明确标出来源，才能判断该不该相信这个数字。
+   */
+  private sourceLine(): string {
+    const dir: string = this.focusDir();
+    if (this.isMeasured(dir)) {
+      return '实测 · ' + this.noteOf(dir);
+    }
+    return '来源：本地仿真（后端未连接或无实测覆盖）';
   }
 
   /** 把饱和度与排队翻译成一句可读的结论 */

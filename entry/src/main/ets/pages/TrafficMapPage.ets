@@ -132,6 +132,11 @@ export struct TrafficMapPage {
     this.draw();
   }
 
+  /** 数据来源文案：有实测写明实测，没有就直说在跑仿真，避免被误读成实时数据 */
+  private sourceText(): string {
+    return this.realSource.length > 0 ? this.realSource : '仿真数据（未连接后端）';
+  }
+
   /** 拉百度实测路况：非空时覆盖对应路段的三档颜色，空则保持仿真着色 */
   async loadRealtime(): Promise<void> {
     const roads: RealtimeRoad[] = await RepositoryFactory.getTrafficRepository().getRealtimeRoads();
@@ -771,8 +776,7 @@ export struct TrafficMapPage {
             .fontSize(ThemeConstants.FONT_TITLE)
             .fontWeight(FontWeight.Bold)
             .fontColor(ThemeConstants.TEXT_MAIN)
-          Text((this.realSource.length > 0 ? this.realSource + ' · ' : '')
-            + '更新于 ' + this.updateTime + ' · 路况显示在道路，堵点会向相邻路段蔓延')
+          Text(this.sourceText() + ' · 更新于 ' + this.updateTime + ' · 路况显示在道路，堵点会向相邻路段蔓延')
             .fontSize(ThemeConstants.FONT_CAPTION)
             .fontColor(ThemeConstants.TEXT_SUB)
             .margin({ top: 4 })
