@@ -14,9 +14,18 @@ export default class EntryAbility extends UIAbility {
     // 百度地图 SDK 初始化：AK 为空时跳过，路况图回落 Canvas 自绘
     if (AppConstants.BAIDU_MAP_AK.length > 0) {
       try {
-        Initializer.getInstance().initialize(AppConstants.BAIDU_MAP_AK, this.context);
-        hilog.info(DOMAIN, 'baidumap', 'SDK initialized');
+        Initializer.getInstance().initialize(AppConstants.BAIDU_MAP_AK, this.context)
+          .then((ok: boolean) => {
+            // 初始化结果供路况图选择渲染引擎（false 时用 Canvas，避免白屏）
+            AppStorage.setOrCreate('baiduMapReady', ok);
+            hilog.info(DOMAIN, 'baidumap', 'SDK init result: %{public}s', ok ? 'ok' : 'failed');
+          })
+          .catch((err: Error) => {
+            AppStorage.setOrCreate('baiduMapReady', false);
+            hilog.error(DOMAIN, 'baidumap', 'SDK init rejected: %{public}s', JSON.stringify(err));
+          });
       } catch (err) {
+        AppStorage.setOrCreate('baiduMapReady', false);
         hilog.error(DOMAIN, 'baidumap', 'SDK init failed: %{public}s', JSON.stringify(err));
       }
     }

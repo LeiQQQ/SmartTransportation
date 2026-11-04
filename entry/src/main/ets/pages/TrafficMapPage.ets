@@ -55,11 +55,11 @@ export struct TrafficMapPage {
   private congestion: number[] = [];
   /** 百度实测路况：segId → 三档 level；空 Map = 用仿真 */
   @Local realLevels: Map<string, number> = new Map();
-  /** 路况图引擎：AUTO 且配置了百度 AK 时用 SDK 底图（道路与百度一致），否则 Canvas 自绘 */
-  @Local useBaidu: boolean = AppConstants.MAP_ENGINE === 'BAIDU'
-    || (AppConstants.MAP_ENGINE === 'AUTO' && AppConstants.BAIDU_MAP_AK.length > 0);
+  /** 路况图引擎：SDK 初始化成功才用百度底图，否则 Canvas 自绘（避免白屏） */
+  @Local useBaidu: boolean = false;
 
   aboutToAppear(): void {
+    this.resolveEngine();
     this.loadAll();
     this.timerId = setInterval(() => {
       this.loadFlows();
@@ -68,6 +68,37 @@ export struct TrafficMapPage {
     this.realTimerId = setInterval(() => {
       this.loadRealtime();
     }, 60_000);
+  }
+
+  /** 选择渲染引擎：SDK 初始化失败 / 未配置 AK 一律回落 Canvas 自绘 */
+  private resolveEngine(): void {
+    if (AppConstants.MAP_ENGINE === 'CANVAS' || AppConstants.BAIDU_MAP_AK.length === 0) {
+      this.useBaidu = false;
+      return;
+    }
+    if (AppConstants.MAP_ENGINE === 'BAIDU') {
+      this.useBaidu = true;
+      return;
+    }
+    const ready: boolean | undefined = AppStorage.get<boolean>('baiduMapReady');
+    if (ready === true) {
+      this.useBaidu = true;
+      return;
+    }
+    if (ready === undefined) {
+      // SDK 初始化是异步的，1.2s 后再判断一次（期间先显示 Canvas，避免空白）
+      setTimeout(() => {
+        if (AppStorage.get<boolean>('baiduMapReady') === true && !this.useBaidu) {
+          this.useBaidu = true;
+        }
+      }, 1200);
+    }
+  }
+
+  /** 百度底图挂载失败（鉴权错/无网络/加载超时）：回落 Canvas，演示不中断 */
+  private onBaiduFail(): void {
+    this.useBaidu = false;
+    this.draw();
   }
 
   aboutToDisappear(): void {
@@ -552,7 +583,10 @@ export struct TrafficMapPage {
           BaiduMapView({
             segments: this.segments,
             intersections: this.intersections,
-            levels: this.realLevels
+            levels: this.realLevels,
+            onFail: () => {
+              this.onBaiduFail();
+            }
           })
         }
         .width('100%')

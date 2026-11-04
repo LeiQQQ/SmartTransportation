@@ -35,7 +35,7 @@ export class AppConstants {
    * 百度地图鸿蒙 SDK AK（应用类型：鸿蒙 SDK，AK 与 AGC 的 AppID 绑定）
    * 为空 = 不初始化 SDK，路况图自动回落 Canvas 自绘（演示不依赖百度底图）
    */
-  static readonly BAIDU_MAP_AK: string = '';
+  static readonly BAIDU_MAP_AK: string = '8r5KGVxO7h7SkH6UnZ19fTwVtslCYrzE';
 
   /**
    * 路况图渲染引擎：'AUTO' 有百度 AK 用 SDK 底图（道路与百度一致），否则 Canvas 自绘

@@ -20,6 +20,9 @@ export struct BaiduMapView {
   @Param intersections: Intersection[] = [];
   /** segId → 三档路况（0 畅通 / 1 缓行 / 2 拥堵），来自百度实测 */
   @Param levels: Map<string, number> = new Map();
+  /** 底图加载失败（鉴权错/无网络/超时）：通知父组件回落 Canvas */
+  @Event onFail: () => void = () => {
+  };
 
   private controller: MapController | null = null;
   /** segId → 已添加的折线，用于等级变化时就地改色 */
@@ -49,11 +52,34 @@ export struct BaiduMapView {
     return new LatLng(p[1], p[0]);
   }
 
+  private loadTimerId: number = -1;
+
+  aboutToAppear(): void {
+    // 鉴权失败或弱网时 SDK 可能既不回调也不报错，8s 兜底回落 Canvas
+    this.loadTimerId = setTimeout(() => {
+      if (this.controller === null) {
+        this.onFail();
+      }
+    }, 8000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.loadTimerId !== -1) {
+      clearTimeout(this.loadTimerId);
+      this.loadTimerId = -1;
+    }
+  }
+
   private onMapReady = (err: BusinessError, ctrl: MapController): void => {
     if (err) {
+      this.onFail();
       return;
     }
     this.controller = ctrl;
+    if (this.loadTimerId !== -1) {
+      clearTimeout(this.loadTimerId);
+      this.loadTimerId = -1;
+    }
     this.drawSegments();
   };
 
