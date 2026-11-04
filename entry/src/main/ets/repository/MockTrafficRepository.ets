@@ -4,6 +4,7 @@ import { AreaTrafficIndex, FlowRecord } from '../model/FlowRecord';
 import { SignalPlan } from '../model/SignalPlan';
 import { Evaluation } from '../model/Evaluation';
 import { CreateEventInput, TrafficEvent } from '../model/TrafficEvent';
+import { RealtimeRoad } from '../model/RealtimeRoad';
 import { XianWallMock } from '../mock/XianWallMock';
 import { EventStore } from '../common/utils/EventStore';
 
@@ -77,5 +78,11 @@ export class MockTrafficRepository implements ITrafficRepository {
     };
     await EventStore.add(event);
     return event;
+  }
+
+  /** MOCK 模式无后端，无真实路况——返回空数组，页面回落确定性仿真 */
+  async getRealtimeRoads(): Promise<RealtimeRoad[]> {
+    await this.delay(30);
+    return [];
   }
 }

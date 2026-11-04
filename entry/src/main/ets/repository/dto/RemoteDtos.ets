@@ -1,4 +1,5 @@
 import { Intersection, RoadSegment } from '../../model/Intersection';
+import { RealtimeRoad } from '../../model/RealtimeRoad';
 import { AreaTrafficIndex, FlowRecord } from '../../model/FlowRecord';
 import { SignalPlan } from '../../model/SignalPlan';
 import { Evaluation } from '../../model/Evaluation';
@@ -19,6 +20,15 @@ export interface SegmentsData {
 
 export interface FlowsData {
   flows: FlowRecord[];
+}
+
+/** /road/realtime 返回体 */
+export interface RealtimeRoadsData {
+  ok: boolean;
+  configured: boolean;
+  ts: number;
+  roads: RealtimeRoad[];
+  failedRoads: string[];
 }
 
 export interface EventsData {

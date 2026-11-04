@@ -8,7 +8,8 @@ import { HttpUtil } from '../common/utils/HttpUtil';
 import { LogUtil } from '../common/utils/LogUtil';
 import { XianWallMock } from '../mock/XianWallMock';
 import { EventStore } from '../common/utils/EventStore';
-import { CreateEventData, EventsData, FlowsData, IntersectionsData, SegmentsData } from './dto/RemoteDtos';
+import { CreateEventData, EventsData, FlowsData, IntersectionsData, RealtimeRoadsData, SegmentsData } from './dto/RemoteDtos';
+import { RealtimeRoad } from '../model/RealtimeRoad';
 
 /**
  * 远程数据源实现：调用后端 /api/v1 接口
@@ -67,6 +68,24 @@ export class RemoteTrafficRepository implements ITrafficRepository {
     } catch (error) {
       RemoteTrafficRepository.logFallback('getAreaIndex');
       return XianWallMock.getAreaIndex();
+    }
+  }
+
+  /**
+   * 路段级实时路况：读操作，失败/无数据返回空数组，调用方回落仿真
+   * 后端有 60s 缓存，这里的失败降级不伪装成真实数据
+   */
+  async getRealtimeRoads(): Promise<RealtimeRoad[]> {
+    try {
+      const response = await HttpUtil.get<RealtimeRoadsData>('/road/realtime', 20_000);
+      if (response.code === 0 && response.data?.ok === true) {
+        return response.data.roads;
+      }
+      RemoteTrafficRepository.logFallback('getRealtimeRoads(未配置或无数据)');
+      return [];
+    } catch (error) {
+      RemoteTrafficRepository.logFallback('getRealtimeRoads');
+      return [];
     }
   }
 

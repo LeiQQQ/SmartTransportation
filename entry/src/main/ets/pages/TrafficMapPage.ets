@@ -6,6 +6,7 @@ import { TrafficUtil } from '../common/utils/TrafficUtil';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
 import { Intersection, RoadSegment } from '../model/Intersection';
 import { FlowRecord } from '../model/FlowRecord';
+import { RealtimeRoad } from '../model/RealtimeRoad';
 import { LonLat, MapGeometry } from '../common/constants/MapGeometry';
 
 /** 地图配色：仅本页绘制使用，模拟导航地图的观感 */
@@ -38,6 +39,8 @@ export struct TrafficMapPage {
   @Local offsetX: number = 0;
   @Local offsetY: number = 0;
   @Local updateTime: string = '--:--:--';
+  /** 非空 = 当前用百度实测路况着色 */
+  @Local realSource: string = '';
 
   private baseScale: number = 1;
   private baseX: number = 0;
@@ -46,20 +49,31 @@ export struct TrafficMapPage {
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
   private ready: boolean = false;
   private timerId: number = -1;
+  private realTimerId: number = -1;
   /** 每条路段的拥堵度（与 segments 同序），含邻路传播 */
   private congestion: number[] = [];
+  /** 百度实测路况：segId → 三档 level；空 Map = 用仿真 */
+  private realLevels: Map<string, number> = new Map();
 
   aboutToAppear(): void {
     this.loadAll();
     this.timerId = setInterval(() => {
       this.loadFlows();
     }, AppConstants.REFRESH_FLOW_MS);
+    // 真实路况：后端有 60s 缓存，端侧 60s 拉一次即可
+    this.realTimerId = setInterval(() => {
+      this.loadRealtime();
+    }, 60_000);
   }
 
   aboutToDisappear(): void {
     if (this.timerId !== -1) {
       clearInterval(this.timerId);
       this.timerId = -1;
+    }
+    if (this.realTimerId !== -1) {
+      clearInterval(this.realTimerId);
+      this.realTimerId = -1;
     }
   }
 
@@ -68,6 +82,7 @@ export struct TrafficMapPage {
     this.intersections = await repo.getIntersections();
     this.segments = await repo.getSegments();
     await this.loadFlows();
+    this.loadRealtime();
   }
 
   async loadFlows(): Promise<void> {
@@ -78,6 +93,26 @@ export struct TrafficMapPage {
     const mm: string = d.getMinutes() < 10 ? '0' + d.getMinutes() : '' + d.getMinutes();
     const ss: string = d.getSeconds() < 10 ? '0' + d.getSeconds() : '' + d.getSeconds();
     this.updateTime = hh + ':' + mm + ':' + ss;
+    this.draw();
+  }
+
+  /** 拉百度实测路况：非空时覆盖对应路段的三档颜色，空则保持仿真着色 */
+  async loadRealtime(): Promise<void> {
+    const roads: RealtimeRoad[] = await RepositoryFactory.getTrafficRepository().getRealtimeRoads();
+    const next: Map<string, number> = new Map();
+    for (let i = 0; i < roads.length; i++) {
+      next.set(roads[i].segId, roads[i].level);
+    }
+    this.realLevels = next;
+    if (roads.length > 0) {
+      const d: Date = new Date();
+      const hh: string = d.getHours() < 10 ? '0' + d.getHours() : '' + d.getHours();
+      const mm: string = d.getMinutes() < 10 ? '0' + d.getMinutes() : '' + d.getMinutes();
+      this.updateTime = hh + ':' + mm + ':' + (d.getSeconds() < 10 ? '0' + d.getSeconds() : '' + d.getSeconds());
+      this.realSource = '数据源：百度实时路况 ' + hh + ':' + mm;
+    } else {
+      this.realSource = '';
+    }
     this.draw();
   }
 
@@ -214,7 +249,8 @@ export struct TrafficMapPage {
         continue;
       }
       const congestion: number = i < this.congestion.length ? this.congestion[i] : 0;
-      const level: number = TrafficUtil.roadLevelOf(congestion);
+      // 百度实测优先，未覆盖的路段回落仿真
+      const level: number = this.realLevels.get(seg.id) ?? TrafficUtil.roadLevelOf(congestion);
       const width: number = this.roadWidthOf(seg.lanes) * (0.62 + level * 0.1);
       this.ctx.globalAlpha = 0.88;
       this.strokePolyline(pts, width, TrafficUtil.colorOfRoadLevel(level), false);
@@ -482,7 +518,8 @@ export struct TrafficMapPage {
             .fontSize(ThemeConstants.FONT_TITLE)
             .fontWeight(FontWeight.Bold)
             .fontColor(ThemeConstants.TEXT_MAIN)
-          Text('更新于 ' + this.updateTime + ' · 路况显示在道路，堵点会向相邻路段蔓延')
+          Text((this.realSource.length > 0 ? this.realSource + ' · ' : '')
+            + '更新于 ' + this.updateTime + ' · 路况显示在道路，堵点会向相邻路段蔓延')
             .fontSize(ThemeConstants.FONT_CAPTION)
             .fontColor(ThemeConstants.TEXT_SUB)
             .margin({ top: 4 })
