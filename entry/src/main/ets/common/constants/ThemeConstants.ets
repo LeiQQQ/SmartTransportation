@@ -17,7 +17,7 @@ export class ThemeConstants {
   static readonly DIVIDER: string = '#EDF0F5';
 
   // 拥堵五级色（与 TrafficUtil 的 level 一一对应）
-  static readonly LEVEL_CLEAR: string = '#00C48C';
+  static readonly LEVEL_CLEAR: string = '#3DC98A';
   static readonly LEVEL_BASIC: string = '#7ED321';
   static readonly LEVEL_LIGHT: string = '#FFB020';
   static readonly LEVEL_MODERATE: string = '#FF7A45';

@@ -9,21 +9,33 @@ import { FlowRecord } from '../model/FlowRecord';
 import { RealtimeRoad } from '../model/RealtimeRoad';
 import { LonLat, MapGeometry } from '../common/constants/MapGeometry';
 
-/** 地图配色：仅本页绘制使用，模拟导航地图的观感 */
-const MAP_BG: string = '#F4F1EA';
-const MAP_GRID: string = '#E8E3D8';
-const MAP_PARK: string = '#DCEBD2';
-const MAP_GREEN: string = '#CFE3C0';
-const MAP_INNER: string = '#F1EEE6';
-const MAP_WALL: string = '#9A8F7A';
-const ROAD_CURB: string = '#DAD4C8';
+/**
+ * 地图配色：对齐百度地图瓦片观感
+ * 底色浅灰白、道路白面灰边、公园浅绿、护城河浅蓝、城墙深灰、路名深灰白描边
+ */
+const MAP_BG: string = '#F6F5F2';
+const MAP_INNER: string = '#F3F2ED';
+const MAP_PARK: string = '#D6EAC9';
+const MAP_GREEN: string = '#CFE7C1';
+const MAP_GREEN_EDGE: string = '#BFDCAC';
+const MAP_WATER: string = '#ABD3F0';
+const MAP_WALL: string = '#B5B0A8';
+const MAP_WALL_EDGE: string = '#9A948C';
 const ROAD_SURFACE: string = '#FFFFFF';
-const ROAD_CENTER: string = '#F0C34E';
-const LABEL_TEXT: string = '#6B7280';
+/** 主干道边线 */
+const ROAD_CURB: string = '#CFCBC2';
+/** 支路边线（更浅，避免图面发脏） */
+const ROAD_CURB_MINOR: string = '#E1DED7';
+const LABEL_TEXT: string = '#3F3F3F';
 const LABEL_HALO: string = '#FFFFFF';
-const NODE_TEXT: string = '#2B2B2B';
+const NODE_TEXT: string = '#4A4A4A';
+const NODE_FILL: string = '#FFFFFF';
 /** 路口节点描边：拥堵信息画在道路上，节点本身保持中性 */
-const NODE_EDGE: string = '#6B7280';
+const NODE_EDGE: string = '#8E8A83';
+/** 路名标注的最短屏幕长度（vp）：太短的路段不标，避免文字压过道路 */
+const MIN_LABEL_LEN: number = 32;
+/** 显示名称的路口：只保留 3 个关键节点，中心区不叠字 */
+const NODE_LABELS: string[] = ['INT_04', 'INT_12', 'INT_15'];
 
 /**
  * 片区路况图：仿真实地图绘制（城墙、绿地、道路走向、路况色带）+ 绝对定位节点
@@ -139,7 +151,7 @@ export struct TrafficMapPage {
 
   /**
    * 分层绘制，顺序即叠放顺序：
-   * 底图 → 绿地 → 城墙 → 道路 → 路况色带 → 路名 → 路口名 → 指北针
+   * 底色 → 护城河 → 公园绿地 → 城内底 → 城墙 → 道路 → 路况带 → 路名 → 路口 → 指北针
    */
   private draw(): void {
     if (!this.ready || this.canvasW <= 0) {
@@ -147,36 +159,29 @@ export struct TrafficMapPage {
     }
     this.ctx.clearRect(0, 0, this.canvasW, this.canvasH);
     this.drawBase();
+    this.drawRiver();
     this.drawGreens();
     this.drawWall();
     this.congestion = this.computeCongestion();
     this.drawRoads();
     this.drawTraffic();
     this.drawRoadLabels();
+    this.drawNodeDots();
     this.drawNodeLabels();
     this.drawCompass();
   }
 
-  /** 底图：地块底色 + 淡网格，模拟街区肌理 */
+  /** 底图：整片浅灰白（百度地图城区底色，不画网格） */
   private drawBase(): void {
     this.ctx.fillStyle = MAP_BG;
     this.ctx.fillRect(0, 0, this.canvasW, this.canvasH);
+  }
 
-    this.ctx.beginPath();
-    this.ctx.strokeStyle = MAP_GRID;
-    this.ctx.lineWidth = 0.6;
-    const step: number = 0.006;
-    for (let lon: number = 108.926; lon <= 108.974; lon += step) {
-      const x: number = AreaConstants.lonToX(lon, this.canvasW);
-      this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, this.canvasH);
-    }
-    for (let lat: number = 34.246; lat <= 34.279; lat += step) {
-      const y: number = AreaConstants.latToY(lat, this.canvasH);
-      this.ctx.moveTo(0, y);
-      this.ctx.lineTo(this.canvasW, y);
-    }
-    this.ctx.stroke();
+  /** 护城河：沿城墙外一圈矩形描粗线，得到环状水面 */
+  private drawRiver(): void {
+    this.ctx.globalAlpha = 0.92;
+    this.strokePolyline(MapGeometry.RIVER, 7.5, MAP_WATER, true);
+    this.ctx.globalAlpha = 1;
   }
 
   /** 绿化：环城公园带 + 城内绿地广场 */
@@ -184,55 +189,54 @@ export struct TrafficMapPage {
     this.fillPolygon(MapGeometry.PARK_BELT, MAP_PARK);
     for (let i = 0; i < MapGeometry.GREENS.length; i++) {
       this.fillPolygon(MapGeometry.GREENS[i].points, MAP_GREEN);
+      this.strokePolyline(MapGeometry.GREENS[i].points, 1, MAP_GREEN_EDGE, true);
     }
   }
 
-  /** 城墙：城内底色 + 墙体轮廓 + 垛口 */
+  /** 城墙：城内底色 + 墙体（外深内浅做出厚度）+ 四门地标 */
   private drawWall(): void {
     this.fillPolygon(MapGeometry.WALL, MAP_INNER);
-    this.strokePolyline(MapGeometry.WALL, 3.2, MAP_WALL, true);
-    this.drawBattlements();
+    this.strokePolyline(MapGeometry.WALL, 5.4, MAP_WALL_EDGE, true);
+    this.strokePolyline(MapGeometry.WALL, 3.6, MAP_WALL, true);
+    this.drawGates();
   }
 
-  /** 垛口：沿墙体外侧等距画短竖线，模拟城墙齿状轮廓 */
-  private drawBattlements(): void {
-    const cx: number = 108.9498;
-    const cy: number = 34.2626;
-    const steps: number = 22;
-    this.ctx.beginPath();
-    this.ctx.strokeStyle = MAP_WALL;
-    this.ctx.lineWidth = 2;
-    this.ctx.lineCap = 'butt';
-    for (let i = 0; i < MapGeometry.WALL.length; i++) {
-      const a: LonLat = MapGeometry.WALL[i];
-      const b: LonLat = MapGeometry.WALL[(i + 1) % MapGeometry.WALL.length];
-      for (let k = 0; k <= steps; k++) {
-        const t: number = k / steps;
-        const lon: number = a.lon + (b.lon - a.lon) * t;
-        const lat: number = a.lat + (b.lat - a.lat) * t;
-        const dx: number = lon > cx + 0.0005 ? 1 : (lon < cx - 0.0005 ? -1 : 0);
-        const dy: number = lat > cy + 0.0005 ? 1 : (lat < cy - 0.0005 ? -1 : 0);
-        const x1: number = AreaConstants.lonToX(lon, this.canvasW);
-        const y1: number = AreaConstants.latToY(lat, this.canvasH);
-        this.ctx.moveTo(x1, y1);
-        this.ctx.lineTo(x1 + dx * 3, y1 - dy * 3);
-      }
+  /** 城门：城墙上的门洞地标（长乐门/永宁门/安定门/安远门） */
+  private drawGates(): void {
+    for (let i = 0; i < MapGeometry.GATES.length; i++) {
+      const x: number = AreaConstants.lonToX(MapGeometry.GATES[i].lon, this.canvasW);
+      const y: number = AreaConstants.latToY(MapGeometry.GATES[i].lat, this.canvasH);
+      this.ctx.fillStyle = MAP_WALL_EDGE;
+      this.ctx.fillRect(x - 3.4, y - 3.4, 6.8, 6.8);
+      this.ctx.fillStyle = MAP_INNER;
+      this.ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
     }
-    this.ctx.stroke();
   }
 
-  /** 道路：先路缘后路面，形成带边线的道路带 */
+  /**
+   * 道路：先边线后路面，形成"白路灰边"的百度地图道路观感
+   * 主干按车道数分级，支路更细更浅，主次分明
+   */
   private drawRoads(): void {
+    // 先铺所有边线，再铺所有路面，避免相邻路段的边线压在前一段的路面上
     for (let i = 0; i < this.segments.length; i++) {
       const seg: RoadSegment = this.segments[i];
       const pts: LonLat[] = this.pointsOf(seg);
       if (pts.length < 2) {
         continue;
       }
-      // 主干按车道数给足宽度，次干与支路画细，主次分明
       const trunk: boolean = MapGeometry.isTrunk(seg.id);
-      this.strokePolyline(pts, trunk ? this.curbWidthOf(seg.lanes) : 4.2, ROAD_CURB, false);
-      this.strokePolyline(pts, trunk ? this.roadWidthOf(seg.lanes) : 2.8, ROAD_SURFACE, false);
+      this.strokePolyline(pts, trunk ? this.curbWidthOf(seg.lanes) : 4.6,
+        trunk ? ROAD_CURB : ROAD_CURB_MINOR, false);
+    }
+    for (let i = 0; i < this.segments.length; i++) {
+      const seg: RoadSegment = this.segments[i];
+      const pts: LonLat[] = this.pointsOf(seg);
+      if (pts.length < 2) {
+        continue;
+      }
+      const trunk: boolean = MapGeometry.isTrunk(seg.id);
+      this.strokePolyline(pts, trunk ? this.roadWidthOf(seg.lanes) : 3.2, ROAD_SURFACE, false);
     }
   }
 
@@ -251,13 +255,12 @@ export struct TrafficMapPage {
       const congestion: number = i < this.congestion.length ? this.congestion[i] : 0;
       // 百度实测优先，未覆盖的路段回落仿真
       const level: number = this.realLevels.get(seg.id) ?? TrafficUtil.roadLevelOf(congestion);
-      const width: number = this.roadWidthOf(seg.lanes) * (0.62 + level * 0.1);
-      this.ctx.globalAlpha = 0.88;
+      // 分级宽度：畅通只留一条淡绿细带（避免整图泛绿），缓行/拥堵逐级加宽突出堵点
+      const factor: number = level === 0 ? 0.34 : (level === 1 ? 0.56 : 0.7);
+      const width: number = this.roadWidthOf(seg.lanes) * factor;
+      this.ctx.globalAlpha = level === 0 ? 0.7 : 0.92;
       this.strokePolyline(pts, width, TrafficUtil.colorOfRoadLevel(level), false);
       this.ctx.globalAlpha = 1;
-      if (seg.lanes >= 3) {
-        this.strokePolyline(pts, 0.7, ROAD_CENTER, false);
-      }
     }
   }
 
@@ -315,44 +318,144 @@ export struct TrafficMapPage {
     return a.fromId === b.fromId || a.fromId === b.toId || a.toId === b.fromId || a.toId === b.toId;
   }
 
-  /** 路名：白描边保证在色带上可读 */
+  /**
+   * 路名：沿道路方向旋转（百度地图样式），同一路名只标一次（取最长路段的中点）
+   * 白色描边保证压在路况色带上仍清晰；字号按主次区分
+   */
   private drawRoadLabels(): void {
-    this.ctx.font = '10vp sans-serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.lineWidth = 3;
-    this.ctx.strokeStyle = LABEL_HALO;
-    this.ctx.fillStyle = LABEL_TEXT;
+    // 同名路段合并：只保留屏幕长度最长的一段用于标注
+    const representative: Map<string, RoadSegment> = new Map();
+    const bestLen: Map<string, number> = new Map();
     for (let i = 0; i < this.segments.length; i++) {
       const seg: RoadSegment = this.segments[i];
       const pts: LonLat[] = this.pointsOf(seg);
-      if (pts.length < 2 || !MapGeometry.isTrunk(seg.id) || this.lengthOf(pts) < 0.004) {
+      if (pts.length < 2) {
         continue;
       }
-      const mid: LonLat = this.midPoint(pts);
+      const len: number = this.screenLengthOf(pts);
+      const prev: number = bestLen.get(seg.name) ?? -1;
+      if (len > prev) {
+        bestLen.set(seg.name, len);
+        representative.set(seg.name, seg);
+      }
+    }
+    const names: string[] = [];
+    representative.forEach((_seg: RoadSegment, name: string) => {
+      names.push(name);
+    });
+    for (let k = 0; k < names.length; k++) {
+      const seg: RoadSegment | undefined = representative.get(names[k]);
+      if (seg === undefined) {
+        continue;
+      }
+      const pts: LonLat[] = this.pointsOf(seg);
+      // 支路不标名：小比例尺下百度地图也不显示支路名，图面更干净
+      if (!MapGeometry.isTrunk(seg.id)) {
+        continue;
+      }
+      const len: number = bestLen.get(names[k]) ?? 0;
+      // 太短的路段不标，避免文字压过路本身
+      if (len < MIN_LABEL_LEN) {
+        continue;
+      }
+      const mid: LonLat = this.pointAt(pts, 0.38);
       const x: number = AreaConstants.lonToX(mid.lon, this.canvasW);
-      const y: number = AreaConstants.latToY(mid.lat, this.canvasH) - 7;
-      this.ctx.strokeText(seg.name, x, y);
-      this.ctx.fillText(seg.name, x, y);
+      const y: number = AreaConstants.latToY(mid.lat, this.canvasH);
+      this.ctx.save();
+      this.ctx.translate(x, y);
+      this.ctx.rotate(this.screenAngleOf(pts));
+      this.ctx.font = '10.5vp sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.lineWidth = 3.4;
+      this.ctx.strokeStyle = LABEL_HALO;
+      this.ctx.fillStyle = LABEL_TEXT;
+      this.ctx.strokeText(seg.name, 0, 0);
+      this.ctx.fillText(seg.name, 0, 0);
+      this.ctx.restore();
     }
   }
 
-  /** 路口名：只标主要路口，避免拥挤 */
+  /** 路口点：小而中性，可点击但不抢路况视觉 */
+  private drawNodeDots(): void {
+    for (let i = 0; i < this.intersections.length; i++) {
+      const it: Intersection = this.intersections[i];
+      const x: number = this.nodeX(it);
+      const y: number = this.nodeY(it);
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, this.isMainNode(it.id) ? 3.4 : 2.6, 0, Math.PI * 2);
+      this.ctx.fillStyle = NODE_FILL;
+      this.ctx.fill();
+      this.ctx.lineWidth = 1.3;
+      this.ctx.strokeStyle = NODE_EDGE;
+      this.ctx.stroke();
+    }
+  }
+
+  /** 路口名：只标 3 个关键节点；钟楼在四路交汇中心，标签放上方避让路名 */
   private drawNodeLabels(): void {
-    this.ctx.font = '10vp sans-serif';
+    this.ctx.font = '9vp sans-serif';
     this.ctx.textAlign = 'center';
-    this.ctx.lineWidth = 3;
+    this.ctx.textBaseline = 'middle';
+    this.ctx.lineWidth = 3.2;
     this.ctx.strokeStyle = LABEL_HALO;
     this.ctx.fillStyle = NODE_TEXT;
-    for (let i = 0; i < MapGeometry.MAIN_NODES.length; i++) {
-      const it: Intersection | undefined = this.find(MapGeometry.MAIN_NODES[i]);
+    for (let i = 0; i < NODE_LABELS.length; i++) {
+      const it: Intersection | undefined = this.find(NODE_LABELS[i]);
       if (it === undefined) {
         continue;
       }
+      const center: boolean = NODE_LABELS[i] === 'INT_04';
       const x: number = this.nodeX(it);
-      const y: number = this.nodeY(it) + 22;
+      const y: number = this.nodeY(it) + (center ? -13 : 14);
       this.ctx.strokeText(it.name, x, y);
       this.ctx.fillText(it.name, x, y);
     }
+  }
+
+  private isMainNode(id: string): boolean {
+    for (let i = 0; i < MapGeometry.MAIN_NODES.length; i++) {
+      if (MapGeometry.MAIN_NODES[i] === id) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** 折线在屏幕上的总长（vp），用于判断是否值得标注 */
+  private screenLengthOf(pts: LonLat[]): number {
+    let total: number = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const dx: number = AreaConstants.lonToX(pts[i].lon, this.canvasW)
+        - AreaConstants.lonToX(pts[i - 1].lon, this.canvasW);
+      const dy: number = AreaConstants.latToY(pts[i].lat, this.canvasH)
+        - AreaConstants.latToY(pts[i - 1].lat, this.canvasH);
+      total += Math.sqrt(dx * dx + dy * dy);
+    }
+    return total;
+  }
+
+  /** 折线主方向（最长线段的屏幕角度，弧度），顺时针旋转且保证文字不倒置 */
+  private screenAngleOf(pts: LonLat[]): number {
+    let angle: number = 0;
+    let longest: number = -1;
+    for (let i = 1; i < pts.length; i++) {
+      const dx: number = AreaConstants.lonToX(pts[i].lon, this.canvasW)
+        - AreaConstants.lonToX(pts[i - 1].lon, this.canvasW);
+      const dy: number = AreaConstants.latToY(pts[i].lat, this.canvasH)
+        - AreaConstants.latToY(pts[i - 1].lat, this.canvasH);
+      const len: number = Math.sqrt(dx * dx + dy * dy);
+      if (len > longest) {
+        longest = len;
+        angle = Math.atan2(dy, dx);
+      }
+    }
+    if (angle > Math.PI / 2) {
+      angle -= Math.PI;
+    } else if (angle < -Math.PI / 2) {
+      angle += Math.PI;
+    }
+    return angle;
   }
 
   /** 指北针 */
@@ -437,17 +540,11 @@ export struct TrafficMapPage {
     return list;
   }
 
-  /** 折线总长（曼哈顿距离，仅用于判断是否值得标注） */
-  private lengthOf(pts: LonLat[]): number {
-    let total: number = 0;
-    for (let i = 1; i < pts.length; i++) {
-      total += Math.abs(pts[i].lon - pts[i - 1].lon) + Math.abs(pts[i].lat - pts[i - 1].lat);
-    }
-    return total;
-  }
-
-  /** 折线中点（按累计长度取半，用于放置路名） */
-  private midPoint(pts: LonLat[]): LonLat {
+  /**
+   * 折线上按长度比例取点（0.5 为中点）
+   * 路名用 0.38 而非中点：略微偏离路口，避免与路口名、多条路名在中心区叠字
+   */
+  private pointAt(pts: LonLat[], ratio: number): LonLat {
     let total: number = 0;
     const spans: number[] = [];
     for (let i = 1; i < pts.length; i++) {
@@ -455,7 +552,7 @@ export struct TrafficMapPage {
       spans.push(d);
       total += d;
     }
-    let half: number = total / 2;
+    let half: number = total * ratio;
     for (let i = 0; i < spans.length; i++) {
       if (half <= spans[i]) {
         const ratio: number = spans[i] === 0 ? 0 : half / spans[i];
@@ -468,36 +565,26 @@ export struct TrafficMapPage {
     return pts[pts.length - 1];
   }
 
-  /** 路缘宽度（含路肩，比路面略宽） */
+  /** 路缘宽度（含路肩，比路面略宽，形成灰色边线） */
   private curbWidthOf(lanes: number): number {
     if (lanes >= 3) {
-      return 9.5;
+      return 10.8;
     }
     if (lanes === 2) {
-      return 7;
+      return 8.4;
     }
-    return 5;
+    return 5.6;
   }
 
-  /** 路面宽度 */
+  /** 路面宽度（百度地图主干道偏宽，便于承载路况色带） */
   private roadWidthOf(lanes: number): number {
     if (lanes >= 3) {
-      return 7.5;
+      return 8.6;
     }
     if (lanes === 2) {
-      return 5.2;
+      return 6.2;
     }
     return 3.4;
-  }
-
-  /** 主要路口画大一点，次要路口画小一点，避免视觉喧宾夺主 */
-  private nodeSize(id: string): number {
-    for (let i = 0; i < MapGeometry.MAIN_NODES.length; i++) {
-      if (MapGeometry.MAIN_NODES[i] === id) {
-        return 13;
-      }
-    }
-    return 10;
   }
 
   private find(id: string): Intersection | undefined {
@@ -552,21 +639,19 @@ export struct TrafficMapPage {
             this.draw();
           })
 
-        // 路口节点（绝对定位，便于点击）
+        // 路口点击热区（视觉由 Canvas 绘制的小圆点承担，这里只做透明热区）
         ForEach(this.intersections, (item: Intersection) => {
           Stack() {
             Circle()
-              .width(this.nodeSize(item.id))
-              .height(this.nodeSize(item.id))
-              .fill(ThemeConstants.BG_CARD)
-              .stroke(NODE_EDGE)
-              .strokeWidth(1.6)
+              .width('100%')
+              .height('100%')
+              .fill(Color.Transparent)
           }
-          .width(24)
-          .height(24)
+          .width(26)
+          .height(26)
           .position({
-            x: this.nodeX(item) - 12,
-            y: this.nodeY(item) - 12
+            x: this.nodeX(item) - 13,
+            y: this.nodeY(item) - 13
           })
           .onClick(() => {
             NavRouter.toIntersection(item.id);

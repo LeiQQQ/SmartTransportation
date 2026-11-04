@@ -35,12 +35,33 @@ export class MapGeometry {
     MapGeometry.point(108.9320, 34.2732)
   ];
 
-  /** 环城公园外缘：先填绿，再被城墙内地块覆盖，形成一圈绿化带 */
+  /**
+   * 护城河：城墙外围一圈水带，沿此矩形描粗线得到环状水面（百度地图同款蓝色环）
+   */
+  static readonly RIVER: LonLat[] = [
+    MapGeometry.point(108.9292, 34.2492),
+    MapGeometry.point(108.9703, 34.2492),
+    MapGeometry.point(108.9703, 34.2760),
+    MapGeometry.point(108.9292, 34.2760)
+  ];
+
+  /**
+   * 环城公园：城墙到护城河之间的绿化带
+   * 绘制时先填绿、再用城墙内地块覆盖内侧，形成一圈绿化
+   */
   static readonly PARK_BELT: LonLat[] = [
-    MapGeometry.point(108.9275, 34.2478),
-    MapGeometry.point(108.9718, 34.2478),
-    MapGeometry.point(108.9718, 34.2775),
-    MapGeometry.point(108.9275, 34.2775)
+    MapGeometry.point(108.9292, 34.2492),
+    MapGeometry.point(108.9703, 34.2492),
+    MapGeometry.point(108.9703, 34.2760),
+    MapGeometry.point(108.9292, 34.2760)
+  ];
+
+  /** 城墙四门（东长乐门、南永宁门、西安定门、北安远门），作为地标点绘制 */
+  static readonly GATES: LonLat[] = [
+    MapGeometry.point(108.9675, 34.2615),
+    MapGeometry.point(108.9495, 34.2520),
+    MapGeometry.point(108.9320, 34.2615),
+    MapGeometry.point(108.9495, 34.2732)
   ];
 
   /** 城内绿地与广场 */
@@ -124,7 +145,11 @@ export class MapGeometry {
 
     // —— 回坊支路 ——
     { id: 'SEG_19', points: [MapGeometry.point(108.9432, 34.2622), MapGeometry.point(108.9436, 34.2650)] } as RoadGeom,
-    { id: 'SEG_20', points: [MapGeometry.point(108.9436, 34.2650), MapGeometry.point(108.9495, 34.2615)] } as RoadGeom,
+    {
+      // 西华门大街：东至北大街后沿街南下接入钟楼，避免斜穿钟楼广场
+      id: 'SEG_20',
+      points: [MapGeometry.point(108.9436, 34.2650), MapGeometry.point(108.9488, 34.2652), MapGeometry.point(108.9492, 34.2634)]
+    } as RoadGeom,
 
     // —— 环城路：沿城墙绕行 ——
     {
