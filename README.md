@@ -3,8 +3,9 @@
 以 **西安城墙内片区** 为例的本科毕业设计项目。面向 11.3 km² 的古城核心区，构建「**感知 → 优化 → 评价 → 服务**」的交通信号配时闭环：以 Webster 模型按实时流量重算配时方案，鸿蒙端将优化过程与结果可视化，并把算法结论翻译成用户能理解的信息（如「该方向还需等待 26 秒」）。
 
 > **实现状态**：端侧**可独立运行**——算法与仿真在 ArkTS 端完成，无需后端即可完整演示。
-> ✅ 已完成：后端服务（Node 20 + TypeScript + Fastify，**11 个接口**）、状态管理 V2 全量迁移、三态数据源（MOCK / AUTO / REMOTE）。
-> ❌ 未做：Map Kit 真实底图、本地关系库（relationalStore）、后端落库与定时任务。
+> ✅ 已完成：后端服务（Node 20 + TypeScript + Fastify，**12 个接口**）、**百度实测路况反推**（实测优先、缺测回落仿真）、
+> 状态管理 V2 全量迁移、三态数据源（MOCK / AUTO / REMOTE）、事件落 SQLite。
+> ❌ 未做：Map Kit 真实底图、本地关系库（relationalStore）、历史流量表与回溯接口。
 > 逐项「已做 / 未做」对照见 **[docs/实现状态清单.md](docs/实现状态清单.md)**。
 
 ![platform](https://img.shields.io/badge/platform-HarmonyOS-0F6FFF)
@@ -55,7 +56,7 @@
 | 状态管理 | **V2**（`@ComponentV2` / `@Local` / `@Param` / `@Monitor`） |
 | 存储 | `@kit.ArkData` preferences（仅收藏）；关系库未建 |
 | 手势 | `PinchGesture` / `PanGesture` 缩放平移 |
-| 后端 | **Node.js 20 + TypeScript + Fastify + SQLite**（✅ 已实现：11 个接口跑通，事件表落 `node:sqlite`，见 [`后端技术方案.md`](docs/后端技术方案.md)） |
+| 后端 | **Node.js 20 + TypeScript + Fastify + SQLite**（✅ 已实现：12 个接口跑通、百度实测反推、事件表落 `node:sqlite`，见 [`后端技术方案.md`](docs/后端技术方案.md)） |
 | 构建 | Hvigor（`targetSdkVersion 26.0.0` / `compatibleSdkVersion 6.1.1(24)`） |
 
 > 地图采用 **Canvas 拓扑自绘**（零依赖、必定可运行）。花瓣地图 Map Kit 仅保留为可选增强方案，
@@ -99,11 +100,11 @@ SmartTransportation/
 │       ├── components/           # 仪表盘、闪屏、空态、加载态
 │       ├── pages/                # 10 个页面（只保留数据、状态与布局）
 │       └── entryability/         # 应用入口
-├── server/                       # 后端服务（Node 20 + TS + Fastify，11 个接口已跑通）
+├── server/                       # 后端服务（Node 20 + TS + Fastify，12 个接口已跑通）
 │   └── src/                      # index/routes/service/algo/source/store/task
 ├── docs/
 │   ├── 项目设计文档.md            # 定位、需求、架构、数据模型、算法、UI
-│   ├── 后端技术方案.md            # 数据源定位、表结构、接口契约、算法、联调（✅ 11 个接口已实现）
+│   ├── 后端技术方案.md            # 数据源定位、表结构、接口契约、实测反推、联调（✅ 12 个接口已实现）
 │   └── 实现状态清单.md            # 已做 / 未做逐项对照
 └── build-profile.json5
 ```
@@ -182,7 +183,7 @@ cd server && npm install && npm run dev    # 监听 0.0.0.0:8080
 | 文档 | 内容 |
 | --- | --- |
 | [项目设计文档](docs/项目设计文档.md) | 研究区域、需求分析、系统架构、功能模块、数据模型、算法推导与参数依据、界面、进度 |
-| [后端技术方案](docs/后端技术方案.md) | V3.0：Node+TS 技术选型、数据源定位（仿真/OSM/地图 API）、8 张表 DDL、11 个接口契约、TS 版 Webster 实现、联调与三态降级（✅ **已实现**：11 个接口跑通；P2 落库与定时任务未做） |
+| [后端技术方案](docs/后端技术方案.md) | V3.2：Node+TS 技术选型、数据源定位（实测反推 + 仿真兜底）、8 张表 DDL、12 个接口契约、TS 版 Webster 实现、联调与三态降级（✅ **已实现**：12 个接口跑通、百度实测反推、事件落库、45 s 实测刷新；历史流量表未做） |
 | [实现状态清单](docs/实现状态清单.md) | 已做 / 未做逐项对照、算法口径核对、文档与实现的偏差、后续优先级 |
 
 ---
@@ -198,7 +199,7 @@ cd server && npm install && npm run dev    # 监听 0.0.0.0:8080
 - [x] 事件中心与上报、收藏、我的、数据说明
 - [x] preferences 收藏持久化
 - [x] 文档客观化修订（V2.2 + 实现状态清单）
-- [x] **前后端分离**：后端 Node+TS 骨架与 11 个接口；端侧网络层与三态降级
+- [x] **前后端分离**：后端 Node+TS 骨架与 12 个接口；端侧网络层与三态降级
 - [x] **事件持久化**：后端 `node:sqlite` 落库（重启不丢、多端共享）；端侧上报接线 + 事件中心 30 s 刷新
 - [x] **实测驱动**：百度路况反推进口道饱和度，`HybridDataSource` 实测优先、缺失回落仿真
 - [x] **代码结构整理**：地图渲染分层（底图/道路/标注）、路况计算独立、刷新控制器统一、实测反推模块化
