@@ -7,6 +7,8 @@ import trafficRoutes from './routes/traffic.js';
 import signalRoutes from './routes/signal.js';
 import eventRoutes from './routes/event.js';
 import roadRoutes from './routes/road.js';
+import { baiduTrafficService } from './container.js';
+import { startRealtimeTask } from './task/realtimeTask.js';
 
 /**
  * 基于HarmonyOS车流自适应信号灯系统设计与开发 · 后端服务入口
@@ -42,6 +44,9 @@ await app.register(trafficRoutes, { prefix: `${SERVER.API_PREFIX}/traffic` });
 await app.register(signalRoutes, { prefix: `${SERVER.API_PREFIX}/signal` });
 await app.register(eventRoutes, { prefix: SERVER.API_PREFIX });
 await app.register(roadRoutes, { prefix: `${SERVER.API_PREFIX}/road` });
+
+// 实时路况定时任务：预热 + 每 45 s 刷新，供流量/配时反推使用
+startRealtimeTask(baiduTrafficService);
 
 try {
   await app.listen({ port: SERVER.PORT, host: SERVER.HOST });

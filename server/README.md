@@ -75,7 +75,7 @@ server/
 | --- | --- | --- |
 | P0 | 接口契约定稿 + 端侧网络层 | ✅ 已完成（`HttpUtil` / `ApiResponse` / `RemoteDtos` / `RemoteTrafficRepository` / 三态工厂） |
 | P1 | 本工程骨架 + 算法平移 + 全部接口 | ✅ 已完成，11 个接口实测通过 |
-| P2 | SQLite 落库 + 定时任务 | 未开始 |
+| P2 | SQLite 落库 + 定时任务 | ✅ 已完成（事件落库、实时路况 45 s 刷新） |
 | P3 | OSM 导出真实路网坐标 | 未开始 |
 | P4 | 地图 API 适配器（可选） | 未开始 |
 
@@ -89,10 +89,30 @@ server/
 | `src/algo/webster.ts` | 最优周期与绿信比分配 |
 | `src/algo/delay.ts` | Webster 延误 |
 | `src/data/network.ts` | 20 路口 + 32 路段静态路网（与端侧严格一致） |
-| `src/source/` | 数据源抽象与仿真实现 |
-| `src/service/` | 流量 / 配时 / 事件三类业务 |
-| `src/routes/` | health / area / traffic / signal / event 五组路由 |
+| `src/algo/reverse.ts` | 实测反推：车速 → 饱和度（BPR 反解）、拥堵距离 → 排队、方向 → 进口道 |
+| `src/source/` | 数据源抽象、纯仿真、实测优先的混合实现 |
+| `src/service/` | 流量 / 配时 / 事件 / 百度路况四类业务 |
+| `src/routes/` | health / area / traffic / signal / event / road 六组路由 |
+| `src/task/realtimeTask.ts` | 实时路况定时刷新（启动预热 + 每 45 s） |
 | `src/container.ts` | 依赖装配 |
+
+### 实测反推链路（真实路况驱动配时）
+
+地图开放平台不提供进口道分方向流量，但 `/traffic/v1/road` 的 `congestion_sections[]`
+给出了「车速、拥堵距离、方向、趋势」。本服务把这些实测参数反推成仿真输入：
+
+```
+speed                --BPR 反函数-->  饱和度 v/c
+congestion_distance  --车头间距 7.5 m-->  排队车辆数
+section_desc 方向     --方位解析-->  只作用于终点路口的对应进口道
+status / trend       --区间约束 + ±0.05 微调-->  避免车速异常导致失真
+```
+
+`HybridDataSource` 命中实测的进口道用反推值，其余回落确定性仿真；
+百度不可用时整体退回纯仿真，接口行为不变（`/health` 的 `dataSource` 会显示当前来源）。
+
+**注意**：评价（`/signal/evaluation`）用**关键进口道（最大饱和度）**而非平均值，
+否则一条过饱和进口道会被三条畅通进口道稀释，优化效果被严重高估。
 
 ---
 

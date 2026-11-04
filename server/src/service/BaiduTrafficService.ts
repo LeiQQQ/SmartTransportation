@@ -1,12 +1,14 @@
 import { BAIDU } from '../config.js';
 import { SEG_TO_BAIDU_ROADS } from '../data/baiduRoads.js';
 import { SEGMENTS } from '../data/network.js';
-import type { RoadSegment } from '../types/intersection.js';
+import { approachFromDesc } from '../algo/reverse.js';
+import type { RealtimeRoad, RealtimeSection, RealtimeSnapshot } from '../types/index.js';
 
 /**
  * 百度地图实时路况服务
  *
  * 接口：GET https://api.map.baidu.com/traffic/v1/road?road_name=&city=&ak=
+ * 返回：evaluation（整体评价）+ road_traffic[].congestion_sections（拥堵区段明细）
  * 状态码：0 未知 / 1 畅通 / 2 缓行 / 3 拥堵 / 4 严重拥堵
  * 映射：百度 1 → 端侧 0（畅通），2 → 1（缓行），3/4 → 2（拥堵）
  *
@@ -14,11 +16,12 @@ import type { RoadSegment } from '../types/intersection.js';
  * AK 未配置或全部失败时 ok=false，端侧继续用确定性仿真数据。
  */
 
-/** 百度拥堵路段（无拥堵时 congestion_sections 可能缺省） */
+/** 百度拥堵路段（无拥堵时 congestion_sections 缺省） */
 interface BaiduSection {
   status?: number;
   speed?: number;
   congestion_distance?: number;
+  congestion_trend?: string;
   section_desc?: string;
 }
 
@@ -29,34 +32,6 @@ interface BaiduRoadResponse {
   description?: string;
   evaluation?: { status?: number; status_desc?: string };
   road_traffic?: Array<{ road_name?: string; congestion_sections?: BaiduSection[] }>;
-}
-
-/** 端侧需要的单路段实时路况 */
-export interface RealtimeRoad {
-  segId: string;
-  segName: string;
-  roadName: string;
-  /** 三档：0 畅通 / 1 缓行 / 2 拥堵（与端侧着色口径一致） */
-  level: number;
-  /** 百度原始状态码 0~4，端侧可用于展示细节 */
-  baiduStatus: number;
-  /** 区段平均车速 km/h，无拥堵路段时为 null */
-  speed: number | null;
-  /** 拥堵距离 m */
-  congestionDistance: number | null;
-  /** 百度语义化描述（道路整体） */
-  desc: string;
-}
-
-export interface RealtimeSnapshot {
-  /** 是否拿到至少一条真实数据 */
-  ok: boolean;
-  /** AK 是否已配置（未配置时端侧应直接走仿真） */
-  configured: boolean;
-  ts: number;
-  roads: RealtimeRoad[];
-  /** 查询失败的道路（含"百度库无此路名"），排查映射用 */
-  failedRoads: string[];
 }
 
 /** 百度状态 → 端侧三档 */
@@ -108,48 +83,78 @@ async function fetchRoad(candidates: readonly string[]): Promise<BaiduRoadRespon
   return null;
 }
 
-/** 道路响应 → 该道路的level/status/speed 聚合（取最差区段） */
+/** 拥堵区段 → 明细数组（解析方向，供进口道级反推使用） */
+function parseSections(raw: BaiduSection[] | undefined): RealtimeSection[] {
+  const list: RealtimeSection[] = [];
+  for (const item of raw ?? []) {
+    const desc: string = item.section_desc ?? '';
+    list.push({
+      status: item.status ?? 0,
+      speed: item.speed ?? 0,
+      congestionDistance: item.congestion_distance ?? 0,
+      trend: item.congestion_trend ?? '',
+      desc: desc,
+      approach: approachFromDesc(desc)
+    });
+  }
+  return list;
+}
+
+/** 道路响应 → 该道路的 level/status/speed 聚合（取最差区段） */
 function summarizeRoad(resp: BaiduRoadResponse, roadName: string): Omit<RealtimeRoad, 'segId' | 'segName'> {
-  const sections: BaiduSection[] = resp.road_traffic?.[0]?.congestion_sections ?? [];
-  let worst: number = resp.evaluation?.status ?? 0;
-  let speed: number | null = null;
+  const sections: RealtimeSection[] = parseSections(resp.road_traffic?.[0]?.congestion_sections);
+  const overall: number = resp.evaluation?.status ?? 0;
+
+  let worst: number = overall;
+  let worstSpeed: number | null = null;
   let distance: number | null = null;
+  let trend: string = '';
   for (const section of sections) {
-    const s: number = section.status ?? 0;
-    if (s > worst) {
-      worst = s;
+    if (section.status > worst) {
+      worst = section.status;
     }
-    if (s >= 2) {
-      // 只取拥堵区段的车速；更堵的优先
-      if (worst === s && section.speed !== undefined) {
-        speed = section.speed;
+  }
+  for (const section of sections) {
+    if (section.status >= 2) {
+      // 车速取最堵区段的；拥堵距离累加（同一条路可能有多段拥堵）
+      if (section.status === worst && section.speed > 0) {
+        worstSpeed = section.speed;
       }
-      if (section.congestion_distance !== undefined) {
-        distance = (distance ?? 0) + section.congestion_distance;
+      distance = (distance ?? 0) + section.congestionDistance;
+      if (section.trend !== '') {
+        trend = section.trend;
       }
     }
   }
+
   return {
     roadName: roadName,
     level: toLevel(worst),
     baiduStatus: worst,
-    speed: speed,
+    speed: worstSpeed,
     congestionDistance: distance,
-    desc: resp.description ?? resp.evaluation?.status_desc ?? ''
+    desc: resp.description ?? resp.evaluation?.status_desc ?? '',
+    sections: sections,
+    trend: trend
   };
 }
 
-const SEG_NAME: Readonly<Record<string, string>> =
-  Object.fromEntries(SEGMENTS.map((seg: RoadSegment) => [seg.id, seg.name]));
-
 export class BaiduTrafficService {
-  /** 全量实时路况：20 条道路分批并发 → 聚合回 32 条路段 */
+  /** 上次成功快照（同步读取，供仿真数据源使用）；无数据时为 null */
+  private latest: RealtimeSnapshot | null = null;
+
+  lastSnapshot(): RealtimeSnapshot | null {
+    return this.latest;
+  }
+
+  /** 全量实时路况：20 条道路串行 → 聚合回 32 条路段 */
   async getRealtimeRoads(force: boolean = false): Promise<RealtimeSnapshot> {
     const configured: boolean = BAIDU.AK.length > 0;
     if (!configured) {
-      return { ok: false, configured: false, ts: Date.now(), roads: [], failedRoads: [] };
+      return { ok: false, configured: false, ts: Date.now(), roads: [], failedRoads: [], congestedRoads: 0 };
     }
     if (!force && cache !== null && Date.now() - cache.ts < BAIDU.CACHE_MS) {
+      this.latest = cache.snapshot;
       return cache.snapshot;
     }
 
@@ -173,6 +178,7 @@ export class BaiduTrafficService {
 
     // 道路级 → 路段级
     const roads: RealtimeRoad[] = [];
+    let congested: number = 0;
     for (const seg of SEGMENTS) {
       const baiduName: string | undefined = SEG_TO_BAIDU_ROADS[seg.id]?.[0];
       if (baiduName === undefined) {
@@ -182,6 +188,9 @@ export class BaiduTrafficService {
       if (info === undefined) {
         continue; // 该道路查询失败，端侧对此段回落仿真
       }
+      if (info.sections.length > 0) {
+        congested++;
+      }
       roads.push({
         segId: seg.id,
         segName: seg.name,
@@ -190,6 +199,8 @@ export class BaiduTrafficService {
         speed: info.speed,
         congestionDistance: info.congestionDistance,
         desc: info.desc,
+        sections: info.sections,
+        trend: info.trend,
         roadName: baiduName
       });
     }
@@ -199,9 +210,11 @@ export class BaiduTrafficService {
       configured: true,
       ts: Date.now(),
       roads: roads,
-      failedRoads: failed
+      failedRoads: failed,
+      congestedRoads: congested
     };
     cache = { ts: snapshot.ts, snapshot: snapshot };
+    this.latest = snapshot;
     return snapshot;
   }
 }

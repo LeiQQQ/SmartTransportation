@@ -78,26 +78,27 @@ export class SignalService {
     const plan: SignalPlan = this.getPlan(intersectionId, scenario);
     const flow: FlowRecord | undefined = this.source.getFlowOf(intersectionId, this.hourOfScenario(scenario));
     const summary = summarize(flow === undefined ? [] : [flow]);
-    const avgSat: number = summary.avgSaturation;
+    // 关键进口道（最大饱和度）：路口的延误与排队由瓶颈进口道决定
+    const keySat: number = summary.maxSaturation;
     const totalVolume: number = summary.totalVolume;
 
     const beforeRatio: number = SIGNAL.BEFORE_GREEN_RATIO;
     const afterRatio: number = ((plan.cycleLength - plan.lostTime) / plan.cycleLength) * 0.92;
 
-    const beforeDelay: number = websterDelay(SIGNAL.BEFORE_CYCLE, beforeRatio, avgSat, totalVolume);
-    const afterDelay: number = websterDelay(plan.cycleLength, afterRatio, avgSat * 0.9, totalVolume);
+    const beforeDelay: number = websterDelay(SIGNAL.BEFORE_CYCLE, beforeRatio, keySat, totalVolume);
+    const afterDelay: number = websterDelay(plan.cycleLength, afterRatio, keySat * 0.9, totalVolume);
 
     const before: Metrics = {
       avgDelay: round1(beforeDelay),
-      avgQueue: round1(avgSat * avgSat * 16),
+      avgQueue: round1(keySat * keySat * 16),
       throughput: Math.round(totalVolume * 0.93),
-      stops: round2(avgSat * 1.6)
+      stops: round2(keySat * 1.6)
     };
     const after: Metrics = {
       avgDelay: round1(afterDelay),
-      avgQueue: round1(avgSat * 0.9 * avgSat * 0.9 * 16),
+      avgQueue: round1(keySat * 0.9 * keySat * 0.9 * 16),
       throughput: Math.round(totalVolume),
-      stops: round2(avgSat * 1.2)
+      stops: round2(keySat * 1.2)
     };
 
     return {

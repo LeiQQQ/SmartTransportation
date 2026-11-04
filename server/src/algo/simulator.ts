@@ -81,17 +81,36 @@ export function buildAreaIndex(records: FlowRecord[], timestamp: number = Date.n
   };
 }
 
-/** 取若干进口道流量的平均值，用于配时与评价 */
-export function summarize(records: FlowRecord[]): { avgSaturation: number; totalVolume: number } {
+/**
+ * 汇总若干进口道流量
+ *
+ * 同时给出平均值与最大值：
+ * 配时看平均，**评价必须看关键进口道（最大饱和度）**——
+ * 一条过饱和进口道被三条畅通进口道平均后会被稀释成"不堵"，
+ * 导致优化效果被严重高估（实测驱动后尤其明显）。
+ */
+export function summarize(records: FlowRecord[]): {
+  avgSaturation: number;
+  maxSaturation: number;
+  totalVolume: number;
+} {
   let sum: number = 0;
+  let max: number = 0;
   let volume: number = 0;
   let count: number = 0;
   for (const record of records) {
     for (const flow of record.flows) {
       sum += flow.saturation;
       volume += flow.volume;
+      if (flow.saturation > max) {
+        max = flow.saturation;
+      }
       count++;
     }
   }
-  return { avgSaturation: count === 0 ? 0.7 : sum / count, totalVolume: count === 0 ? 1200 : volume };
+  return {
+    avgSaturation: count === 0 ? 0.7 : sum / count,
+    maxSaturation: count === 0 ? 0.7 : max,
+    totalVolume: count === 0 ? 1200 : volume
+  };
 }
