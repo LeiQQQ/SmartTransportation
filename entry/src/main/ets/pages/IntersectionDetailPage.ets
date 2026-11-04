@@ -2,6 +2,8 @@ import { ThemeConstants } from '../common/constants/ThemeConstants';
 import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { TrafficUtil } from '../common/utils/TrafficUtil';
+import { RefreshController } from '../common/utils/RefreshController';
+import { IntersectionScene, IntersectionView } from '../common/render/IntersectionView';
 import { FavoriteUtil } from '../common/utils/FavoriteUtil';
 import { ToastUtil } from '../common/utils/ToastUtil';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
@@ -32,18 +34,21 @@ export struct IntersectionDetailPage {
 
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
+  private view: IntersectionView | undefined = undefined;
   private ready: boolean = false;
   private shift: number = 0;
   private tickId: number = -1;
   private frameId: number = -1;
-  private dataId: number = -1;
+  private refresher: RefreshController | undefined = undefined;
 
   aboutToAppear(): void {
     this.loadData();
     // 半分钟刷新一次路口的流量与配时，避免页面停留时数据停滞
-    this.dataId = setInterval(() => {
-      this.refreshData();
-    }, AppConstants.REFRESH_DATA_MS);
+    this.refresher = new RefreshController(AppConstants.REFRESH_DATA_MS, () => this.refreshData(),
+      (busy: boolean) => {
+        this.refreshing = busy;
+      });
+    this.refresher.start();
   }
 
   aboutToDisappear(): void {
@@ -55,9 +60,8 @@ export struct IntersectionDetailPage {
       clearInterval(this.frameId);
       this.frameId = -1;
     }
-    if (this.dataId !== -1) {
-      clearInterval(this.dataId);
-      this.dataId = -1;
+    if (this.refresher !== undefined) {
+      this.refresher.stop();
     }
   }
 
@@ -222,117 +226,36 @@ export struct IntersectionDetailPage {
     if (!this.ready || this.canvasW <= 0) {
       return;
     }
-    const w: number = this.canvasW;
-    const h: number = this.canvasH;
-    const cx: number = w / 2;
-    const cy: number = h / 2;
-    const road: number = 34;
-
-    this.ctx.clearRect(0, 0, w, h);
-
-    // 路面
-    this.ctx.fillStyle = '#E9EDF4';
-    this.ctx.fillRect(0, cy - road, w, road * 2);
-    this.ctx.fillRect(cx - road, 0, road * 2, h);
-
-    // 车道分隔虚线
-    this.ctx.strokeStyle = '#FFFFFF';
-    this.ctx.lineWidth = 1.5;
-    this.ctx.setLineDash([8, 8]);
-    this.ctx.beginPath();
-    this.ctx.moveTo(0, cy);
-    this.ctx.lineTo(cx - road, cy);
-    this.ctx.moveTo(cx + road, cy);
-    this.ctx.lineTo(w, cy);
-    this.ctx.moveTo(cx, 0);
-    this.ctx.lineTo(cx, cy - road);
-    this.ctx.moveTo(cx, cy + road);
-    this.ctx.lineTo(cx, h);
-    this.ctx.stroke();
-    this.ctx.setLineDash([]);
-
-    // 路口中心
-    this.ctx.fillStyle = '#DCE3ED';
-    this.ctx.fillRect(cx - road, cy - road, road * 2, road * 2);
-
-    // 四个方向的车辆
-    this.drawEast(w, cx, cy, road);
-    this.drawWest(cx, cy, road);
-    this.drawNorth(cy, cx, road);
-    this.drawSouth(h, cy, cx, road);
-
-    // 方向文字
-    this.ctx.fillStyle = '#8A94A6';
-    this.ctx.font = '11vp sans-serif';
-    this.ctx.textAlign = 'center';
-    this.ctx.fillText('北', cx, 16);
-    this.ctx.fillText('南', cx, h - 8);
-    this.ctx.textAlign = 'left';
-    this.ctx.fillText('西', 8, cy - road - 8);
-    this.ctx.textAlign = 'right';
-    this.ctx.fillText('东', w - 8, cy - road - 8);
+    this.ensureView().render(this.scene());
   }
 
-  private drawVehicle(x: number, y: number, color: string): void {
-    this.ctx.fillStyle = color;
-    this.ctx.fillRect(x - 6, y - 9, 12, 18);
-  }
-
-  private drawEast(w: number, cx: number, cy: number, road: number): void {
-    const green: boolean = this.isGreen('EAST');
-    const queue: number = Math.min(6, this.queueOf('EAST'));
-    const color: string = green ? '#2E7D32' : '#4A5568';
-    for (let i = 0; i < queue; i++) {
-      const move: number = green ? this.shift * 18 : 0;
-      const x: number = cx + road + 14 + i * 20 - move;
-      if (x > w - 10) {
-        continue;
-      }
-      this.drawVehicle(x, cy + 14, color);
+  private ensureView(): IntersectionView {
+    if (this.view === undefined) {
+      this.view = new IntersectionView(this.ctx);
     }
+    return this.view;
   }
 
-  private drawWest(cx: number, cy: number, road: number): void {
-    const green: boolean = this.isGreen('WEST');
-    const queue: number = Math.min(6, this.queueOf('WEST'));
-    const color: string = green ? '#2E7D32' : '#4A5568';
-    for (let i = 0; i < queue; i++) {
-      const move: number = green ? this.shift * 18 : 0;
-      const x: number = cx - road - 14 - i * 20 + move;
-      if (x < 10) {
-        continue;
-      }
-      this.drawVehicle(x, cy - 14, color);
+  /** 把页面状态整理成渲染输入：只给"几辆车、是否绿灯"，不把业务对象塞进绘制层 */
+  private scene(): IntersectionScene {
+    const dirs: string[] = ['EAST', 'WEST', 'NORTH', 'SOUTH'];
+    const queues: Map<string, number> = new Map();
+    const greens: Map<string, boolean> = new Map();
+    for (let i = 0; i < dirs.length; i++) {
+      queues.set(dirs[i], this.queueOf(dirs[i]));
+      greens.set(dirs[i], this.isGreen(dirs[i]));
     }
+    const scene: IntersectionScene = {
+      canvasW: this.canvasW,
+      canvasH: this.canvasH,
+      shift: this.shift,
+      queues: queues,
+      greens: greens
+    };
+    return scene;
   }
 
-  private drawNorth(cy: number, cx: number, road: number): void {
-    const green: boolean = this.isGreen('NORTH');
-    const queue: number = Math.min(6, this.queueOf('NORTH'));
-    const color: string = green ? '#2E7D32' : '#4A5568';
-    for (let i = 0; i < queue; i++) {
-      const move: number = green ? this.shift * 18 : 0;
-      const y: number = cy - road - 14 - i * 20 + move;
-      if (y < 10) {
-        continue;
-      }
-      this.drawVehicle(cx + 14, y, color);
-    }
-  }
 
-  private drawSouth(h: number, cy: number, cx: number, road: number): void {
-    const green: boolean = this.isGreen('SOUTH');
-    const queue: number = Math.min(6, this.queueOf('SOUTH'));
-    const color: string = green ? '#2E7D32' : '#4A5568';
-    for (let i = 0; i < queue; i++) {
-      const move: number = green ? this.shift * 18 : 0;
-      const y: number = cy + road + 14 + i * 20 - move;
-      if (y > h - 10) {
-        continue;
-      }
-      this.drawVehicle(cx - 14, y, color);
-    }
-  }
 
   // ---------------- UI ----------------
 
@@ -369,13 +292,9 @@ export struct IntersectionDetailPage {
               .fontSize(13)
               .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
               .onClick(() => {
-                if (this.refreshing) {
-                  return;
+                if (this.refresher !== undefined) {
+                  this.refresher.trigger();
                 }
-                this.refreshing = true;
-                this.refreshData().then(() => {
-                  this.refreshing = false;
-                });
               })
           }
         }

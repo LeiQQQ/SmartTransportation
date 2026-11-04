@@ -2,6 +2,7 @@ import { ThemeConstants } from '../common/constants/ThemeConstants';
 import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { TrafficUtil } from '../common/utils/TrafficUtil';
+import { RefreshController } from '../common/utils/RefreshController';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
 import { Intersection } from '../model/Intersection';
 import { SignalPhase, SignalPlan } from '../model/SignalPlan';
@@ -37,20 +38,21 @@ export struct SignalPlanPage {
   @Local refreshing: boolean = false;
 
   private scenarios: string[] = ['早高峰', '平峰', '晚高峰'];
-  private timerId: number = -1;
+  private refresher: RefreshController | undefined = undefined;
 
   aboutToAppear(): void {
     this.loadData();
     // 半分钟刷新：配时随实测流量重算，页面停留时也要跟上
-    this.timerId = setInterval(() => {
-      this.loadData();
-    }, AppConstants.REFRESH_DATA_MS);
+    this.refresher = new RefreshController(AppConstants.REFRESH_DATA_MS, () => this.loadData(),
+      (busy: boolean) => {
+        this.refreshing = busy;
+      });
+    this.refresher.start();
   }
 
   aboutToDisappear(): void {
-    if (this.timerId !== -1) {
-      clearInterval(this.timerId);
-      this.timerId = -1;
+    if (this.refresher !== undefined) {
+      this.refresher.stop();
     }
   }
 

@@ -3,6 +3,7 @@ import { AreaConstants } from '../common/constants/AreaConstants';
 import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { TrafficUtil } from '../common/utils/TrafficUtil';
+import { RefreshController } from '../common/utils/RefreshController';
 import { TrafficGauge } from '../components/TrafficGauge';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
 import { Intersection } from '../model/Intersection';
@@ -27,20 +28,23 @@ export struct HomePage {
   @Local refreshing: boolean = false;
   @Local isRefreshing: boolean = false;
 
-  private timerId: number = -1;
+  private refresher: RefreshController | undefined = undefined;
 
   aboutToAppear(): void {
     this.loadData();
     this.offline = RepositoryFactory.isOffline();
-    this.timerId = setInterval(() => {
-      this.loadData();
-    }, AppConstants.REFRESH_INDEX_MS);
+    // 定时与手动共用同一刷新入口：下拉、按钮、轮询三者不会叠在一起
+    this.refresher = new RefreshController(AppConstants.REFRESH_INDEX_MS, () => this.loadData(),
+      (busy: boolean) => {
+        this.refreshing = busy;
+        this.isRefreshing = busy;
+      });
+    this.refresher.start();
   }
 
   aboutToDisappear(): void {
-    if (this.timerId !== -1) {
-      clearInterval(this.timerId);
-      this.timerId = -1;
+    if (this.refresher !== undefined) {
+      this.refresher.stop();
     }
   }
 
@@ -126,14 +130,13 @@ export struct HomePage {
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
 
-        Text('刷新')
+        Text(this.refreshing ? '刷新中' : '刷新')
           .fontSize(13)
-          .fontColor(ThemeConstants.PRIMARY)
+          .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
           .onClick(() => {
-            this.refreshing = true;
-            this.loadData().then(() => {
-              this.refreshing = false;
-            });
+            if (this.refresher !== undefined) {
+              this.refresher.trigger();
+            }
           })
       }
       .width('100%')
@@ -279,9 +282,9 @@ export struct HomePage {
       }
       .layoutWeight(1)
       .onRefreshing(() => {
-        this.loadData().then(() => {
-          this.isRefreshing = false;
-        });
+        if (this.refresher !== undefined) {
+          this.refresher.trigger();
+        }
       })
     }
     .width('100%')

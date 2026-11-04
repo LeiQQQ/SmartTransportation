@@ -89,7 +89,8 @@ server/
 | `src/algo/webster.ts` | 最优周期与绿信比分配 |
 | `src/algo/delay.ts` | Webster 延误 |
 | `src/data/network.ts` | 20 路口 + 32 路段静态路网（与端侧严格一致） |
-| `src/algo/reverse.ts` | 实测反推：车速 → 饱和度（BPR 反解）、拥堵距离 → 排队、方向 → 进口道 |
+| `src/algo/reverse.ts` | 反推基础公式：BPR 反解、状态区间约束、趋势微调、区段与路段的方位匹配 |
+| `src/algo/measured.ts` | 单段实测反推（车速/距离/方向 → 饱和度/排队/进口道）与畅通区间约束 |
 | `src/source/` | 数据源抽象、纯仿真、实测优先的混合实现 |
 | `src/service/` | 流量 / 配时 / 事件 / 百度路况四类业务 |
 | `src/routes/` | health / area / traffic / signal / event / road 六组路由 |

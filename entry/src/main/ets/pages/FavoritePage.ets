@@ -2,6 +2,7 @@ import { ThemeConstants } from '../common/constants/ThemeConstants';
 import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
 import { FavoriteUtil } from '../common/utils/FavoriteUtil';
+import { RefreshController } from '../common/utils/RefreshController';
 import { EmptyView } from '../components/EmptyView';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
 import { Intersection } from '../model/Intersection';
@@ -17,20 +18,21 @@ export struct FavoritePage {
   @Local saturations: number[] = [];
   @Local refreshing: boolean = false;
 
-  private timerId: number = -1;
+  private refresher: RefreshController | undefined = undefined;
 
   aboutToAppear(): void {
     this.loadData();
     // 半分钟刷新饱和度，收藏列表本身来自本地存储
-    this.timerId = setInterval(() => {
-      this.loadData();
-    }, AppConstants.REFRESH_DATA_MS);
+    this.refresher = new RefreshController(AppConstants.REFRESH_DATA_MS, () => this.loadData(),
+      (busy: boolean) => {
+        this.refreshing = busy;
+      });
+    this.refresher.start();
   }
 
   aboutToDisappear(): void {
-    if (this.timerId !== -1) {
-      clearInterval(this.timerId);
-      this.timerId = -1;
+    if (this.refresher !== undefined) {
+      this.refresher.stop();
     }
   }
 
@@ -81,13 +83,9 @@ export struct FavoritePage {
             .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
             .margin({ right: 12 })
             .onClick(() => {
-              if (this.refreshing) {
-                return;
+              if (this.refresher !== undefined) {
+                this.refresher.trigger();
               }
-              this.refreshing = true;
-              this.loadData().then(() => {
-                this.refreshing = false;
-              });
             })
           Text(this.list.length + ' 个')
             .fontSize(12)

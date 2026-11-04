@@ -3,14 +3,13 @@ import { INTERSECTIONS, SEGMENTS, findIntersection } from '../data/network.js';
 import { TRAFFIC } from '../config.js';
 import { buildAreaIndex, buildFlowRecord, hourOf } from '../algo/simulator.js';
 import { capacityOf } from '../util/metric.js';
+import { clamp, distanceMeters } from '../algo/reverse.js';
 import {
-  FREE_SATURATION, applyTrend, boundByStatus, clamp, congestionWeight, distanceMeters,
-  matchSectionSegment, queueFromDistance, saturationFromSpeed
-} from '../algo/reverse.js';
+  CLEAR_HIGH, CLEAR_LOW, CLEAR_QUEUE_MAX, MeasuredSegment, approachTo, resolveMeasured
+} from '../algo/measured.js';
 import type { BaiduTrafficService } from '../service/BaiduTrafficService.js';
 import type {
-  ApproachDir, ApproachFlow, AreaTrafficIndex, FlowRecord, Intersection, RealtimeRoad,
-  RealtimeSection, RealtimeSnapshot, RoadSegment
+  ApproachDir, ApproachFlow, AreaTrafficIndex, FlowRecord, Intersection, RealtimeSnapshot, RoadSegment
 } from '../types/index.js';
 
 /**
@@ -27,28 +26,6 @@ import type {
  *   congestion_sections[].section_desc 的方向   → 只作用于终点路口的对应进口道
  *   congestion_sections[].status/trend          → 约束区间与趋势微调
  */
-
-/** 单段实测反推结果 */
-interface MeasuredSegment {
-  /** 实测反推的饱和度（拥堵/缓行时有意义） */
-  saturation: number;
-  /**
-   * 百度未返回拥堵区段 = 该段畅通：只约束上限，不覆盖仿真差异
-   * （若直接写死低值，所有非拥堵进口道会变成同一个数字，反而失真）
-   */
-  clear: boolean;
-  queue: number;
-  /** 实测方向对应的进口道；null 表示双向都适用 */
-  approach: ApproachDir | null;
-  /** 实测明细文案，端侧用于标注「这个数字从哪来」 */
-  note: string;
-}
-
-/** 畅通区间的饱和度上下限（实测判定畅通时的约束范围） */
-const CLEAR_LOW: number = 0.2;
-const CLEAR_HIGH: number = 0.55;
-/** 畅通时排队车辆数上限（辆） */
-const CLEAR_QUEUE_MAX: number = 8;
 
 export class HybridDataSource implements IDataSource {
   private readonly baidu: BaiduTrafficService;
@@ -168,7 +145,8 @@ export class HybridDataSource implements IDataSource {
         continue;
       }
       const neighborId: string = seg.fromId === intersection.id ? seg.toId : seg.fromId;
-      if (this.approachOf(intersection, neighborId) !== dir) {
+      const neighbor: Intersection | undefined = findIntersection(neighborId);
+      if (neighbor === undefined || approachTo(intersection, neighbor) !== dir) {
         continue;
       }
       const measured: MeasuredSegment | undefined = bySeg.get(seg.id);
@@ -184,20 +162,6 @@ export class HybridDataSource implements IDataSource {
     return null;
   }
 
-  /** 相邻路口相对本路口的方位 → 本路口对应的进口道 */
-  private approachOf(intersection: Intersection, neighborId: string): ApproachDir | null {
-    const neighbor: Intersection | undefined = findIntersection(neighborId);
-    if (neighbor === undefined) {
-      return null;
-    }
-    const dx: number = neighbor.longitude - intersection.longitude;
-    const dy: number = neighbor.latitude - intersection.latitude;
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      return dx < 0 ? 'WEST' : 'EAST';
-    }
-    return dy < 0 ? 'SOUTH' : 'NORTH';
-  }
-
   /** 段级反推：同一快照只算一次 */
   private measuredMap(snap: RealtimeSnapshot): Map<string, MeasuredSegment> {
     if (this.measured !== null && this.measured.ts === snap.ts) {
@@ -209,62 +173,10 @@ export class HybridDataSource implements IDataSource {
       if (seg === undefined) {
         continue;
       }
-      const measured: MeasuredSegment | null = this.reverseOf(road, seg);
-      if (measured !== null) {
-        bySeg.set(seg.id, measured);
-      }
+      bySeg.set(seg.id, resolveMeasured(road, seg, this.lengthOf(seg)));
     }
     this.measured = { ts: snap.ts, bySeg: bySeg };
     return bySeg;
-  }
-
-  /** 单段反推：车速 → 饱和度，拥堵距离 → 排队，方向 → 进口道 */
-  private reverseOf(road: RealtimeRoad, seg: RoadSegment): MeasuredSegment | null {
-    if (road.sections.length === 0) {
-      // 百度仅在存在拥堵区段时返回该数组：空 = 整段畅通
-      return { saturation: FREE_SATURATION, clear: true, queue: 0, approach: null, note: '实测畅通' };
-    }
-
-    // 长道路被切成多段播报时，用方位词（东段/西段…）把拥堵落到具体路段
-    let target = road.sections.find((item) => matchSectionSegment(item.desc, seg.name));
-    if (target === undefined) {
-      // 描述未指明方位：取最拥堵的一段，按长度占比分摊影响
-      target = road.sections.reduce((worst, item) => (item.status > worst.status ? item : worst));
-    }
-
-    const raw: number = saturationFromSpeed(target.speed);
-    const bounded: number = boundByStatus(raw, target.status);
-    const withTrend: number = applyTrend(bounded, target.trend);
-    // 只堵一小段时整段平均饱和度不该被拉满
-    const weight: number = congestionWeight(target.congestionDistance, this.lengthOf(seg));
-    const saturation: number = FREE_SATURATION + (withTrend - FREE_SATURATION) * weight;
-
-    return {
-      saturation: Number(saturation.toFixed(2)),
-      clear: false,
-      queue: queueFromDistance(target.congestionDistance * weight),
-      approach: target.approach,
-      note: this.sectionNote(target)
-    };
-  }
-
-  /** 实测细节文案：方向 · 拥堵长度 · 趋势 · 车速 */
-  private sectionNote(section: RealtimeSection): string {
-    const parts: string[] = [];
-    const head: string = section.desc.split(',')[0].trim();
-    if (head.length > 0) {
-      parts.push(head);
-    }
-    if (section.congestionDistance > 0) {
-      parts.push(section.congestionDistance + 'm');
-    }
-    if (section.trend.length > 0) {
-      parts.push(section.trend);
-    }
-    if (section.speed > 0) {
-      parts.push(section.speed.toFixed(0) + 'km/h');
-    }
-    return parts.length > 0 ? parts.join(' · ') : '实测拥堵';
   }
 
   /** 路段长度（米）：两端路口直线距离，用于拥堵占比与车速加权 */

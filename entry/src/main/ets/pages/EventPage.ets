@@ -1,6 +1,7 @@
 import { ThemeConstants } from '../common/constants/ThemeConstants';
 import { AppConstants } from '../common/constants/AppConstants';
 import { NavRouter } from '../common/base/NavRouter';
+import { RefreshController } from '../common/utils/RefreshController';
 import { RepositoryFactory } from '../repository/RepositoryFactory';
 import { EventTypeUtil, TrafficEvent } from '../model/TrafficEvent';
 
@@ -16,20 +17,21 @@ export struct EventPage {
 
   private filters: number[] = [-1, 0, 3, 1, 2];
 
-  private timerId: number = -1;
+  private refresher: RefreshController | undefined = undefined;
 
   aboutToAppear(): void {
     this.loadData();
     // 事件跨设备共享：半分钟轮询，其他设备上报的事件会自动出现
-    this.timerId = setInterval(() => {
-      this.loadData();
-    }, AppConstants.REFRESH_DATA_MS);
+    this.refresher = new RefreshController(AppConstants.REFRESH_DATA_MS, () => this.loadData(),
+      (busy: boolean) => {
+        this.refreshing = busy;
+      });
+    this.refresher.start();
   }
 
   aboutToDisappear(): void {
-    if (this.timerId >= 0) {
-      clearInterval(this.timerId);
-      this.timerId = -1;
+    if (this.refresher !== undefined) {
+      this.refresher.stop();
     }
   }
 
@@ -93,13 +95,9 @@ export struct EventPage {
           .fontColor(this.refreshing ? ThemeConstants.TEXT_SUB : ThemeConstants.PRIMARY)
           .margin({ right: 14 })
           .onClick(() => {
-            if (this.refreshing) {
-              return;
+            if (this.refresher !== undefined) {
+              this.refresher.trigger();
             }
-            this.refreshing = true;
-            this.loadData().then(() => {
-              this.refreshing = false;
-            });
           })
 
         Text('+ 上报')
